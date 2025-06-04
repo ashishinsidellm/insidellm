@@ -1,0 +1,73 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "insidellm"
+version = "1.0.0"
+authors = [
+    {name = "InsideLLM Team", email = "support@insidellm.com"},
+]
+description = "Python SDK for LLM/Agent Analytics Platform"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+keywords = ["llm", "agent", "analytics", "tracking", "observability", "langchain"]
+dependencies = [
+    "pydantic>=2.0.0",
+    "requests>=2.25.0",
+]
+
+[project.optional-dependencies]
+langchain = ["langchain>=0.1.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=22.0.0",
+    "flake8>=4.0.0",
+    "mypy>=1.0.0",
+    "twine>=4.0.0",
+    "build>=0.8.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/insidellm/python-sdk"
+Documentation = "https://docs.insidellm.com/python-sdk"
+Repository = "https://github.com/insidellm/python-sdk.git"
+Issues = "https://github.com/insidellm/python-sdk/issues"
+
+[tool.setuptools.packages.find]
+include = ["insidellm*"]
+
+[tool.setuptools.package-data]
+insidellm = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
