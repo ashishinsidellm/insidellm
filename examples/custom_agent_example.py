@@ -258,6 +258,7 @@ def main():
     # Initialize InsideLLM
     insidellm.initialize(
         api_key=os.getenv("INSIDELLM_API_KEY", "demo-key"),
+        local_testing= True,
         auto_flush_interval=3.0,
         batch_size=5
     )
