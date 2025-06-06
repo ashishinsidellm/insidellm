@@ -312,7 +312,7 @@ def main():
     # Initialize the SDK
     try:
         insidellm.initialize(
-            api_key=os.getenv("INSIDELLM_API_KEY", "demo-key"),
+            api_key=os.getenv("INSIDELLM_API_KEY", "iilmn-sample-key"),
             local_testing= True,
             auto_flush_interval=10.0,  # Flush every 10 seconds
             batch_size=20,

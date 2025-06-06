@@ -203,7 +203,7 @@ class InsideLLMClient:
         if not events:
             return True
         
-        url = f"{self.base_url}/v1/runs/ingest"
+        url = f"{self.base_url}/api/v1/ingest"
         
         # Convert events to API format
         payload = []
