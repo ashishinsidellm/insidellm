@@ -17,6 +17,6 @@ def merge_json_lines(input_file_path, output_file_path):
         json.dump(merged_data, outfile, indent=2)
 
 # Example usage
-input_file = 'multi_agent_logs/events_2025-06-06.json'  # replace with your input file
+input_file = 'multi_agent_logs/events_2025-06-08.json'  # replace with your input file
 output_file = 'multi_agent_logs/merged_json.json'
 merge_json_lines(input_file, output_file)

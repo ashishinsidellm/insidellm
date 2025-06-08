@@ -15,27 +15,27 @@ class EventType(str, Enum):
     """Enumeration of all supported event types."""
     
     # User Interaction
-    USER_INPUT = "user_input"
-    USER_FEEDBACK = "user_feedback"
+    USER_INPUT = "user.input"
+    USER_FEEDBACK = "user.feedback"
     
     # Agent Processing
-    AGENT_REASONING = "agent_reasoning"
-    AGENT_PLANNING = "agent_planning"
-    AGENT_RESPONSE = "agent_response"
+    AGENT_REASONING = "agent.reasoning"
+    AGENT_PLANNING = "agent.planning"
+    AGENT_RESPONSE = "agent.response"
     
     # LLM Operations
-    LLM_REQUEST = "llm_request"
-    LLM_RESPONSE = "llm_response"
-    LLM_STREAMING_CHUNK = "llm_streaming_chunk"
+    LLM_REQUEST = "llm.request"
+    LLM_RESPONSE = "llm.response"
+    LLM_STREAMING_CHUNK = "llm.streaming_chunk"
     
     # Tool/Function Calls
-    TOOL_CALL = "tool_call"
-    TOOL_RESPONSE = "tool_response"
+    TOOL_CALL = "tool.call"
+    TOOL_RESPONSE = "tool.response"
     FUNCTION_EXECUTION = "function_execution"
     
     # External APIs
-    API_REQUEST = "api_request"
-    API_RESPONSE = "api_response"
+    API_REQUEST = "api.request"
+    API_RESPONSE = "api.response"
     
     # Error Handling
     ERROR = "error"
@@ -43,8 +43,8 @@ class EventType(str, Enum):
     TIMEOUT_ERROR = "timeout_error"
     
     # System Events
-    SESSION_START = "session_start"
-    SESSION_END = "session_end"
+    SESSION_START = "run.start"
+    SESSION_END = "run.end"
     PERFORMANCE_METRIC = "performance_metric"
 
 
