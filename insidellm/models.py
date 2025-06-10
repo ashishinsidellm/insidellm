@@ -6,9 +6,40 @@ import uuid
 from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, root_validator
 
 from .utils import generate_uuid, get_iso_timestamp
+
+
+# Multimodal Content Models
+
+class ContentMetadata(BaseModel):
+    """Metadata for multimodal content."""
+    width: Optional[int] = None
+    height: Optional[int] = None
+    duration: Optional[float] = None
+    format: Optional[str] = None  # e.g., "jpeg", "mp3", "mp4"
+    description: Optional[str] = None
+
+
+class MultimodalContent(BaseModel):
+    """Represents a piece of multimodal content."""
+    text: Optional[str] = None
+    uri: Optional[str] = None  # For image, audio, video links
+    metadata: Optional[ContentMetadata] = None
+
+    @root_validator(pre=True)
+    def ensure_text_or_uri(cls, values):
+        """Ensure that either text or uri is provided."""
+        if not values.get("text") and not values.get("uri"):
+            raise ValueError("Either 'text' or 'uri' must be provided for MultimodalContent")
+        return values
+
+    # Allow easy initialization with just text for backward compatibility
+    def __init__(self, text: Optional[str] = None, **data):
+        if text is not None:
+            data["text"] = text
+        super().__init__(**data)
 
 
 class EventType(str, Enum):
@@ -57,10 +88,20 @@ class BasePayload(BaseModel):
 
 class UserInputPayload(BasePayload):
     """Payload for user input events."""
-    input_text: str
-    input_type: str = "text"  # text, voice, image, etc.
+    content: MultimodalContent
+    content_type: str  # text, image, audio, video, etc.
     channel: Optional[str] = None  # web, mobile, api, etc.
     session_context: Optional[Dict[str, Any]] = None
+
+    @validator('content_type')
+    def validate_content_type(cls, v: str, values: Dict[str, Any]) -> str:
+        content = values.get('content')
+        if content:
+            if v == "text" and not content.text:
+                raise ValueError("content.text must be provided for content_type 'text'")
+            if v in ["image", "audio", "video"] and not content.uri:
+                raise ValueError(f"content.uri must be provided for content_type '{v}'")
+        return v
 
 
 class UserFeedbackPayload(BasePayload):
@@ -99,17 +140,29 @@ class LLMRequestPayload(BasePayload):
     """Payload for LLM request events."""
     model_name: str
     provider: str  # openai, anthropic, huggingface, etc.
-    prompt: str
+    input: List[MultimodalContent]
     parameters: Optional[Dict[str, Any]] = None  # temperature, max_tokens, etc.
     system_message: Optional[str] = None
-    messages: Optional[List[Dict[str, Any]]] = None  # For chat models
+    messages: Optional[List[MultimodalContent]] = None  # For chat models
+
+    @root_validator(pre=True)
+    def ensure_input_or_messages(cls, values):
+        """Ensure that either input or messages is provided, but not both."""
+        input_val = values.get("input")
+        messages_val = values.get("messages")
+        if not input_val and not messages_val:
+            raise ValueError("Either 'input' or 'messages' must be provided for LLMRequestPayload")
+        # We can allow both if a use case arises, but for now, let's assume one or the other.
+        # if input_val and messages_val:
+        #     raise ValueError("'input' and 'messages' cannot both be provided for LLMRequestPayload")
+        return values
 
 
 class LLMResponsePayload(BasePayload):
     """Payload for LLM response events."""
     model_name: str
     provider: str
-    response_text: str
+    output: MultimodalContent
     finish_reason: Optional[str] = None
     usage: Optional[Dict[str, Any]] = None  # token counts, etc.
     response_time_ms: Optional[int] = None
@@ -139,7 +192,7 @@ class ToolResponsePayload(BasePayload):
     tool_name: str
     tool_type: str
     call_id: Optional[str] = None
-    response_data: Any
+    response_data: Union[Any, MultimodalContent]
     execution_time_ms: Optional[int] = None
     success: bool = True
     error_message: Optional[str] = None
@@ -313,14 +366,28 @@ class Event(BaseModel):
         cls,
         run_id: str,
         user_id: str,
-        input_text: str,
-        input_type: str = "text",
+        content: Union[MultimodalContent, str],
+        content_type: str, # e.g. "text", "image"
         **kwargs
     ) -> 'Event':
         """Create a user input event."""
+        if isinstance(content, str):
+            processed_content = MultimodalContent(text=content)
+            # Ensure content_type is 'text' if a raw string is passed for content
+            if content_type != "text":
+                # Or raise error, but this seems more user-friendly to auto-correct
+                # given we are creating MultimodalContent from a string.
+                import warnings
+                warnings.warn(f"content_type was '{content_type}' but content was a string. Overriding content_type to 'text'.")
+                content_type = "text"
+        elif isinstance(content, MultimodalContent):
+            processed_content = content
+        else:
+            raise TypeError("content must be a string or MultimodalContent object")
+
         payload = UserInputPayload(
-            input_text=input_text,
-            input_type=input_type,
+            content=processed_content,
+            content_type=content_type,
             **{k: v for k, v in kwargs.items() if k in UserInputPayload.__fields__}
         ).dict()
         
@@ -339,16 +406,43 @@ class Event(BaseModel):
         user_id: str,
         model_name: str,
         provider: str,
-        prompt: str,
+        input: Union[List[MultimodalContent], MultimodalContent, str], # Allow single MultimodalContent or str for convenience
+        messages: Optional[List[MultimodalContent]] = None,
         **kwargs
     ) -> 'Event':
         """Create an LLM request event."""
-        payload = LLMRequestPayload(
-            model_name=model_name,
-            provider=provider,
-            prompt=prompt,
+        processed_input: Optional[List[MultimodalContent]] = None
+        processed_messages: Optional[List[MultimodalContent]] = messages
+
+        if input: # input can be None if messages are provided
+            if isinstance(input, str):
+                processed_input = [MultimodalContent(text=input)]
+            elif isinstance(input, MultimodalContent):
+                processed_input = [input]
+            elif isinstance(input, list) and all(isinstance(item, MultimodalContent) for item in input):
+                processed_input = input
+            else:
+                raise TypeError("input must be a string, MultimodalContent, or List[MultimodalContent]")
+
+        # Ensure that 'input' key in LLMRequestPayload is set to None if processed_input is None
+        # and messages are provided, otherwise Pydantic validation might fail if it expects 'input'
+        # to be always present.
+        payload_data = {
+            "model_name": model_name,
+            "provider": provider,
+            "messages": processed_messages,
             **{k: v for k, v in kwargs.items() if k in LLMRequestPayload.__fields__}
-        ).dict()
+        }
+        if processed_input is not None:
+            payload_data["input"] = processed_input
+        elif "input" in LLMRequestPayload.__fields__ and "input" not in payload_data and messages is None:
+             # if messages are also None, this will be caught by ensure_input_or_messages validator
+             pass
+
+
+        payload = LLMRequestPayload(
+            **payload_data
+        ).dict(exclude_none=True) # exclude_none to handle optional input/messages
         
         return cls(
             run_id=run_id,
@@ -365,15 +459,22 @@ class Event(BaseModel):
         user_id: str,
         model_name: str,
         provider: str,
-        response_text: str,
+        output: Union[MultimodalContent, str],
         parent_event_id: Optional[str] = None,
         **kwargs
     ) -> 'Event':
         """Create an LLM response event."""
+        if isinstance(output, str):
+            processed_output = MultimodalContent(text=output)
+        elif isinstance(output, MultimodalContent):
+            processed_output = output
+        else:
+            raise TypeError("output must be a string or MultimodalContent object")
+
         payload = LLMResponsePayload(
             model_name=model_name,
             provider=provider,
-            response_text=response_text,
+            output=processed_output,
             **{k: v for k, v in kwargs.items() if k in LLMResponsePayload.__fields__}
         ).dict()
         

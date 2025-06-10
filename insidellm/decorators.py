@@ -6,9 +6,9 @@ import functools
 import logging
 import time
 import traceback
-from typing import Any, Callable, Dict, Optional, TypeVar, Union
+from typing import Any, Callable, Dict, Optional, TypeVar, Union, List
 
-from .models import Event, EventType
+from .models import Event, EventType, MultimodalContent
 from .utils import generate_uuid, get_iso_timestamp, current_parent_event_id_var
 from .client import InsideLLMClient
 from .exceptions import ConfigurationError
@@ -64,14 +64,44 @@ def track_llm_call(
             request_event_id = generate_uuid()
             parent_id_from_context = current_parent_event_id_var.get()
             
-            # Extract prompt
+            # Extract prompt/input
+            raw_input_data: Any
             if extract_prompt:
-                prompt = extract_prompt(*args, **kwargs)
+                raw_input_data = extract_prompt(*args, **kwargs)
             else:
                 # Default extraction - look for common prompt parameter names
-                prompt = kwargs.get('prompt') or kwargs.get('messages') or (args[0] if args else '')
-            
+                raw_input_data = kwargs.get('prompt') or kwargs.get('input') or \
+                                 kwargs.get('messages') or (args[0] if args else None)
+
+            processed_input: List[MultimodalContent]
+            if isinstance(raw_input_data, str):
+                processed_input = [MultimodalContent(text=raw_input_data)]
+            elif isinstance(raw_input_data, MultimodalContent):
+                processed_input = [raw_input_data]
+            elif isinstance(raw_input_data, list) and all(isinstance(item, MultimodalContent) for item in raw_input_data):
+                processed_input = raw_input_data
+            elif raw_input_data is None: # Case where messages might be handled separately or input is truly None
+                processed_input = [] # Or handle as error, but LLMRequestPayload expects List[MultimodalContent] or messages
+            else:
+                # Attempt to stringify if it's not a recognized multimodal type, then wrap
+                logger.warning(f"LLM input data type {type(raw_input_data)} not directly supported for MultimodalContent list, converting to string.")
+                processed_input = [MultimodalContent(text=str(raw_input_data))]
+
             # Log LLM request event
+            # Note: The 'messages' field of LLMRequestPayload is not explicitly handled here yet by a separate
+            # extract_messages. If raw_input_data was meant to be 'messages', it needs to be List[MultimodalContent].
+            # For now, 'input' field is prioritized.
+            request_payload_dict = {
+                'model_name': model_name,
+                'provider': provider,
+                'input': processed_input,
+                 # Remove 'prompt' and 'input' from parameters to avoid duplication if they were in kwargs
+                'parameters': {k: v for k, v in kwargs.items() if k not in ['prompt', 'input', 'messages']}
+            }
+            # If processed_input is empty and there's no 'messages' alternative (not yet supported here),
+            # this might be an issue depending on LLMRequestPayload validation.
+            # However, create_llm_request in models.py handles input string to List[MultimodalContent]
+
             request_event = Event(
                 event_id=request_event_id,
                 run_id=current_run_id,
@@ -79,12 +109,7 @@ def track_llm_call(
                 event_type=EventType.LLM_REQUEST,
                 parent_event_id=parent_id_from_context,
                 metadata=metadata,
-                payload={
-                    'model_name': model_name,
-                    'provider': provider,
-                    'prompt': str(prompt),
-                    'parameters': {k: v for k, v in kwargs.items() if k != 'prompt'}
-                }
+                payload=request_payload_dict
             )
             tracking_client.log_event(request_event)
             current_parent_event_id_var.set(request_event_id)
@@ -97,12 +122,23 @@ def track_llm_call(
                 response_time_ms = int((end_time - start_time) * 1000)
                 
                 # Extract response
+                raw_output_data: Any
                 if extract_response:
-                    response_text = extract_response(result)
+                    raw_output_data = extract_response(result)
                 else:
                     # Default extraction
-                    response_text = str(result)
-                
+                    raw_output_data = result # Keep as is, convert to string only if not MultimodalContent
+
+                processed_output: MultimodalContent
+                if isinstance(raw_output_data, MultimodalContent):
+                    processed_output = raw_output_data
+                elif isinstance(raw_output_data, str):
+                    processed_output = MultimodalContent(text=raw_output_data)
+                else:
+                    # Attempt to stringify if it's not a recognized multimodal type
+                    logger.warning(f"LLM output data type {type(raw_output_data)} not directly MultimodalContent, converting to string and wrapping.")
+                    processed_output = MultimodalContent(text=str(raw_output_data))
+
                 # Log LLM response event
                 response_event = Event(
                     event_id=generate_uuid(),
@@ -114,8 +150,11 @@ def track_llm_call(
                     payload={
                         'model_name': model_name,
                         'provider': provider,
-                        'response_text': response_text,
+                        'output': processed_output, # Changed from response_text
                         'response_time_ms': response_time_ms
+                        # Other fields like 'usage' or 'finish_reason' can be added via extract_response
+                        # if extract_response returns a dict that is then spread into the payload.
+                        # For now, this is direct.
                     }
                 )
                 tracking_client.log_event(response_event)

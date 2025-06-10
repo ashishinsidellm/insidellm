@@ -4,10 +4,10 @@ InsideLLM Context Manager - Context manager for tracking agent workflows
 
 import logging
 import time
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List, Union
 from contextlib import contextmanager
 
-from .models import Event, EventType
+from .models import Event, EventType, MultimodalContent
 from .utils import generate_uuid, get_iso_timestamp, current_parent_event_id_var
 from .client import InsideLLMClient
 from .exceptions import ConfigurationError
@@ -100,16 +100,16 @@ class InsideLLMTracker:
     
     def log_user_input(
         self,
-        input_text: str,
-        input_type: str = "text",
+        content: Union[MultimodalContent, str],
+        content_type: str = "text",
         **kwargs
     ) -> str:
         """
         Log user input event.
         
         Args:
-            input_text: The user input text
-            input_type: Type of input (text, voice, image, etc.)
+            content: The user input content (text or MultimodalContent object)
+            content_type: Type of content (e.g., "text", "image")
             **kwargs: Additional payload parameters
             
         Returns:
@@ -119,8 +119,8 @@ class InsideLLMTracker:
         event = Event.create_user_input(
             run_id=self.run_id,
             user_id=self.user_id,
-            input_text=input_text,
-            input_type=input_type,
+            content=content,
+            content_type=content_type,
             parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
@@ -133,8 +133,8 @@ class InsideLLMTracker:
     
     def log_agent_response(
         self,
-        response_text: str,
-        response_type: str = "text",
+        response: Union[MultimodalContent, str],
+        response_type: str = "text",  # Corresponds to AgentResponsePayload.response_type
         parent_event_id: Optional[str] = None,
         **kwargs
     ) -> str:
@@ -142,15 +142,34 @@ class InsideLLMTracker:
         Log agent response event.
         
         Args:
-            response_text: The agent response text
-            response_type: Type of response
-            parent_event_id: ID of the parent event
-            **kwargs: Additional payload parameters
+            response: The agent response (text or MultimodalContent object).
+                      If MultimodalContent, its .text will be used.
+            response_type: Type of response (e.g., "text", "action").
+                           This aligns with AgentResponsePayload's response_type.
+            parent_event_id: ID of the parent event.
+            **kwargs: Additional payload parameters for AgentResponsePayload.
             
         Returns:
             Event ID
         """
         p_id = parent_event_id or current_parent_event_id_var.get()
+
+        actual_response_text: Optional[str] = None
+        if isinstance(response, MultimodalContent):
+            actual_response_text = response.text
+            # If response_type is "text" but MultimodalContent has no text, it might be an issue.
+            # However, AgentResponsePayload expects a string for response_text.
+            # We could also warn if response.uri is present but response_type is just "text".
+            # For now, we prioritize extracting .text if it's MultimodalContent.
+        elif isinstance(response, str):
+            actual_response_text = response
+        else:
+            raise TypeError("response must be a string or MultimodalContent object")
+
+        # Ensure 'response_text' and 'response_type' are not duplicated in kwargs
+        kwargs.pop('response_text', None)
+        kwargs.pop('response_type', None)
+
         event = Event(
             run_id=self.run_id,
             user_id=self.user_id,
@@ -158,7 +177,7 @@ class InsideLLMTracker:
             parent_event_id=p_id,
             metadata=self.metadata,
             payload={
-                'response_text': response_text,
+                'response_text': actual_response_text,
                 'response_type': response_type,
                 **kwargs
             }
@@ -173,7 +192,8 @@ class InsideLLMTracker:
         self,
         model_name: str,
         provider: str,
-        prompt: str,
+        input: Union[List[MultimodalContent], MultimodalContent, str],
+        messages: Optional[List[MultimodalContent]] = None,
         parent_event_id: Optional[str] = None,
         **kwargs
     ) -> str:
@@ -183,7 +203,8 @@ class InsideLLMTracker:
         Args:
             model_name: Name of the model
             provider: LLM provider
-            prompt: The prompt sent to the LLM
+            input: The input to the LLM (text, MultimodalContent, or list of MultimodalContent)
+            messages: Optional list of messages for chat models.
             parent_event_id: ID of the parent event
             **kwargs: Additional payload parameters
             
@@ -191,12 +212,17 @@ class InsideLLMTracker:
             Event ID
         """
         p_id = parent_event_id or current_parent_event_id_var.get()
+        # Ensure 'input' and 'messages' are not duplicated if passed in kwargs
+        kwargs.pop('input', None)
+        kwargs.pop('messages', None)
+
         event = Event.create_llm_request(
             run_id=self.run_id,
             user_id=self.user_id,
             model_name=model_name,
             provider=provider,
-            prompt=prompt,
+            input=input,
+            messages=messages,
             parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
@@ -211,7 +237,7 @@ class InsideLLMTracker:
         self,
         model_name: str,
         provider: str,
-        response_text: str,
+        output: Union[MultimodalContent, str],
         parent_event_id: Optional[str] = None,
         **kwargs
     ) -> str:
@@ -221,7 +247,7 @@ class InsideLLMTracker:
         Args:
             model_name: Name of the model
             provider: LLM provider
-            response_text: The response from the LLM
+            output: The response from the LLM (text or MultimodalContent)
             parent_event_id: ID of the parent event (usually the request)
             **kwargs: Additional payload parameters
             
@@ -229,12 +255,15 @@ class InsideLLMTracker:
             Event ID
         """
         p_id = parent_event_id or current_parent_event_id_var.get()
+        # Ensure 'output' is not duplicated if passed in kwargs
+        kwargs.pop('output', None)
+
         event = Event.create_llm_response(
             run_id=self.run_id,
             user_id=self.user_id,
             model_name=model_name,
             provider=provider,
-            response_text=response_text,
+            output=output,
             parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
@@ -408,34 +437,43 @@ class InsideLLMTracker:
         return event.event_id
     
     @contextmanager
-    def track_llm_call(self, model_name: str, provider: str, prompt: str):
+    def track_llm_call(self, model_name: str, provider: str,
+                       input: Union[List[MultimodalContent], MultimodalContent, str],
+                       messages: Optional[List[MultimodalContent]] = None):
         """
         Context manager for tracking LLM calls.
         
         Args:
             model_name: Name of the model
             provider: LLM provider
-            prompt: The prompt sent to the LLM
+            input: The input to the LLM (text, MultimodalContent, or list of MultimodalContent)
+            messages: Optional list of messages for chat models.
             
         Yields:
             A callable to log the response
             
         Example:
             with tracker.track_llm_call('gpt-4', 'openai', 'Hello') as log_response:
-                response = call_llm(prompt)
-                log_response(response)
+                response_content = call_llm(input_text) # or call_llm_multimodal(input_object)
+                log_response(response_content)
+
+            # For chat models
+            with tracker.track_llm_call('claude-3', 'anthropic', input=None, messages=[...]) as log_response:
+                response_content = call_chat_model(messages)
+                log_response(response_content)
+
         """
         # Log request
-        request_id = self.log_llm_request(model_name, provider, prompt)
+        request_id = self.log_llm_request(model_name, provider, input=input, messages=messages)
         start_time = time.time()
         
-        def log_response(response_text: str, **kwargs):
+        def log_response(output: Union[MultimodalContent, str], **kwargs):
             """Log the LLM response."""
             response_time_ms = int((time.time() - start_time) * 1000)
             return self.log_llm_response(
                 model_name=model_name,
                 provider=provider,
-                response_text=response_text,
+                output=output,
                 parent_event_id=request_id,
                 response_time_ms=response_time_ms,
                 **kwargs
