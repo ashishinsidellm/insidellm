@@ -9,7 +9,7 @@ import traceback
 from typing import Any, Callable, Dict, Optional, TypeVar, Union
 
 from .models import Event, EventType
-from .utils import generate_uuid, get_iso_timestamp
+from .utils import generate_uuid, get_iso_timestamp, current_parent_event_id_var
 from .client import InsideLLMClient
 from .exceptions import ConfigurationError
 
@@ -62,6 +62,7 @@ def track_llm_call(
             
             # Generate event IDs
             request_event_id = generate_uuid()
+            parent_id_from_context = current_parent_event_id_var.get()
             
             # Extract prompt
             if extract_prompt:
@@ -76,6 +77,7 @@ def track_llm_call(
                 run_id=current_run_id,
                 user_id=current_user_id,
                 event_type=EventType.LLM_REQUEST,
+                parent_event_id=parent_id_from_context,
                 metadata=metadata,
                 payload={
                     'model_name': model_name,
@@ -85,6 +87,7 @@ def track_llm_call(
                 }
             )
             tracking_client.log_event(request_event)
+            current_parent_event_id_var.set(request_event_id)
             
             # Execute function and track timing
             start_time = time.time()
@@ -116,6 +119,7 @@ def track_llm_call(
                     }
                 )
                 tracking_client.log_event(response_event)
+                current_parent_event_id_var.set(response_event.event_id)
                 
                 return result
                 
@@ -143,6 +147,7 @@ def track_llm_call(
                     }
                 )
                 tracking_client.log_event(error_event)
+                current_parent_event_id_var.set(error_event.event_id)
                 
                 raise
         
@@ -188,6 +193,7 @@ def track_tool_use(
             
             # Generate event IDs
             call_event_id = generate_uuid()
+            parent_id_from_context = current_parent_event_id_var.get()
             
             # Extract parameters
             if extract_parameters:
@@ -205,6 +211,7 @@ def track_tool_use(
                 run_id=current_run_id,
                 user_id=current_user_id,
                 event_type=EventType.TOOL_CALL,
+                parent_event_id=parent_id_from_context,
                 metadata=metadata,
                 payload={
                     'tool_name': tool_name,
@@ -214,6 +221,7 @@ def track_tool_use(
                 }
             )
             tracking_client.log_event(call_event)
+            current_parent_event_id_var.set(call_event_id)
             
             # Execute function and track timing
             start_time = time.time()
@@ -246,6 +254,7 @@ def track_tool_use(
                     }
                 )
                 tracking_client.log_event(response_event)
+                current_parent_event_id_var.set(response_event.event_id)
                 
                 return result
                 
@@ -272,6 +281,7 @@ def track_tool_use(
                     }
                 )
                 tracking_client.log_event(response_event)
+                current_parent_event_id_var.set(response_event.event_id)
                 
                 raise
         
@@ -309,7 +319,7 @@ def track_agent_step(
             if not current_run_id or not current_user_id:
                 logger.warning("No active run context, agent step not tracked")
                 return func(*args, **kwargs)
-            
+            parent_id_from_context = current_parent_event_id_var.get()
             # Execute function and track timing
             start_time = time.time()
             try:
@@ -323,6 +333,7 @@ def track_agent_step(
                     run_id=current_run_id,
                     user_id=current_user_id,
                     event_type=EventType.AGENT_REASONING,
+                    parent_event_id=parent_id_from_context,
                     metadata=metadata,
                     payload={
                         'reasoning_type': step_name,
@@ -331,6 +342,7 @@ def track_agent_step(
                     }
                 )
                 tracking_client.log_event(reasoning_event)
+                current_parent_event_id_var.set(reasoning_event.event_id)
                 
                 return result
                 
@@ -343,7 +355,7 @@ def track_agent_step(
                     run_id=current_run_id,
                     user_id=current_user_id,
                     event_type=EventType.ERROR,
-                    parent_event_id=None,
+                    parent_event_id=parent_id_from_context,
                     metadata=metadata,
                     payload={
                         'error_type': 'agent_step_error',
@@ -357,6 +369,7 @@ def track_agent_step(
                     }
                 )
                 tracking_client.log_event(error_event)
+                current_parent_event_id_var.set(error_event.event_id)
                 
                 raise
         
@@ -393,7 +406,7 @@ def track_function_execution(
             if not current_run_id or not current_user_id:
                 logger.warning("No active run context, function execution not tracked")
                 return func(*args, **kwargs)
-            
+            parent_id_from_context = current_parent_event_id_var.get()
             # Use provided name or function name
             name = function_name or func.__name__
             
@@ -410,6 +423,7 @@ def track_function_execution(
                     run_id=current_run_id,
                     user_id=current_user_id,
                     event_type=EventType.FUNCTION_EXECUTION,
+                    parent_event_id=parent_id_from_context,
                     metadata=metadata,
                     payload={
                         'function_name': name,
@@ -423,6 +437,7 @@ def track_function_execution(
                     }
                 )
                 tracking_client.log_event(execution_event)
+                current_parent_event_id_var.set(execution_event.event_id)
                 
                 return result
                 
@@ -436,6 +451,7 @@ def track_function_execution(
                     run_id=current_run_id,
                     user_id=current_user_id,
                     event_type=EventType.FUNCTION_EXECUTION,
+                    parent_event_id=parent_id_from_context,
                     metadata=metadata,
                     payload={
                         'function_name': name,
@@ -450,6 +466,7 @@ def track_function_execution(
                     }
                 )
                 tracking_client.log_event(execution_event)
+                current_parent_event_id_var.set(execution_event.event_id)
                 
                 raise
         

@@ -8,7 +8,7 @@ from typing import Any, Dict, Optional
 from contextlib import contextmanager
 
 from .models import Event, EventType
-from .utils import generate_uuid, get_iso_timestamp
+from .utils import generate_uuid, get_iso_timestamp, current_parent_event_id_var
 from .client import InsideLLMClient
 from .exceptions import ConfigurationError
 
@@ -115,16 +115,19 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = kwargs.pop('parent_event_id', current_parent_event_id_var.get())
         event = Event.create_user_input(
             run_id=self.run_id,
             user_id=self.user_id,
             input_text=input_text,
             input_type=input_type,
+            parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"User input logged: {event.event_id}")
         return event.event_id
     
@@ -147,11 +150,12 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event(
             run_id=self.run_id,
             user_id=self.user_id,
             event_type=EventType.AGENT_RESPONSE,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             payload={
                 'response_text': response_text,
@@ -161,6 +165,7 @@ class InsideLLMTracker:
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"Agent response logged: {event.event_id}")
         return event.event_id
     
@@ -185,18 +190,20 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event.create_llm_request(
             run_id=self.run_id,
             user_id=self.user_id,
             model_name=model_name,
             provider=provider,
             prompt=prompt,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"LLM request logged: {event.event_id}")
         return event.event_id
     
@@ -221,18 +228,20 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event.create_llm_response(
             run_id=self.run_id,
             user_id=self.user_id,
             model_name=model_name,
             provider=provider,
             response_text=response_text,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"LLM response logged: {event.event_id}")
         return event.event_id
     
@@ -255,11 +264,12 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event(
             run_id=self.run_id,
             user_id=self.user_id,
             event_type=EventType.TOOL_CALL,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             payload={
                 'tool_name': tool_name,
@@ -269,6 +279,7 @@ class InsideLLMTracker:
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"Tool call logged: {tool_name} - {event.event_id}")
         return event.event_id
     
@@ -297,11 +308,12 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event(
             run_id=self.run_id,
             user_id=self.user_id,
             event_type=EventType.TOOL_RESPONSE,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             payload={
                 'tool_name': tool_name,
@@ -314,6 +326,7 @@ class InsideLLMTracker:
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"Tool response logged: {tool_name} - {event.event_id}")
         return event.event_id
     
@@ -338,18 +351,20 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = parent_event_id or current_parent_event_id_var.get()
         event = Event.create_error(
             run_id=self.run_id,
             user_id=self.user_id,
             error_type=error_type,
             error_message=error_message,
             error_code=error_code,
-            parent_event_id=parent_event_id,
+            parent_event_id=p_id,
             metadata=self.metadata,
             **kwargs
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"Error logged: {error_type} - {event.event_id}")
         return event.event_id
     
@@ -372,10 +387,12 @@ class InsideLLMTracker:
         Returns:
             Event ID
         """
+        p_id = kwargs.pop('parent_event_id', current_parent_event_id_var.get())
         event = Event(
             run_id=self.run_id,
             user_id=self.user_id,
             event_type=EventType.PERFORMANCE_METRIC,
+            parent_event_id=p_id,
             metadata=self.metadata,
             payload={
                 'metric_name': metric_name,
@@ -386,6 +403,7 @@ class InsideLLMTracker:
         )
         
         self.client.log_event(event)
+        current_parent_event_id_var.set(event.event_id)
         logger.debug(f"Performance metric logged: {metric_name} = {metric_value}")
         return event.event_id
     

@@ -3,6 +3,7 @@ InsideLLM Utilities - Utility functions for the SDK
 """
 
 import uuid
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Union
 
@@ -244,3 +245,9 @@ def deep_merge_dicts(dict1: Dict[str, Any], dict2: Dict[str, Any]) -> Dict[str, 
             result[key] = value
     
     return result
+
+#Context variable for current parent event ID
+current_parent_event_id_var: ContextVar[Optional[str]] = ContextVar(
+    "current_parent_event_id",
+    default=None
+)
