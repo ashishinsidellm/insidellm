@@ -13,11 +13,42 @@ try:
     LANGCHAIN_AVAILABLE = True
 except ImportError:
     LANGCHAIN_AVAILABLE = False
+    # Create dummy classes when LangChain is not available
     BaseCallbackHandler = object
+    
+    class LLMResult:
+        def __init__(self):
+            self.generations = []
+            self.llm_output = {}
+    
+    class AgentAction:
+        def __init__(self):
+            self.log = ""
+    
+    class AgentFinish:
+        def __init__(self):
+            self.return_values = {}
 
-from .models import Event, EventType
-from .utils import generate_uuid, get_iso_timestamp
-from .client import InsideLLMClient
+# Fix for relative imports - use absolute imports instead
+try:
+    # Try relative imports first (when running as module)
+    from .models import Event, EventType
+    from .utils import generate_uuid, get_iso_timestamp
+    from .client import InsideLLMClient
+except ImportError:
+    # Fall back to absolute imports (when running directly)
+    try:
+        from insidellm.models import Event, EventType
+        from insidellm.utils import generate_uuid, get_iso_timestamp
+        from insidellm.client import InsideLLMClient
+    except ImportError:
+        # If still failing, add current directory to path
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        from models import Event, EventType
+        from utils import generate_uuid, get_iso_timestamp
+        from client import InsideLLMClient
 
 logger = logging.getLogger(__name__)
 
@@ -427,3 +458,9 @@ class InsideLLMCallback(BaseCallbackHandler):
         
         # Otherwise, try to find it in our parent mapping
         return self._parent_run_map.get(parent_run_id)
+
+
+# Main execution block for testing
+if __name__ == "__main__":
+    print("InsideLLM LangChain Integration loaded successfully!")
+    print("To use this module, import it as: from insidellm.langchain_integration import InsideLLMCallback")
