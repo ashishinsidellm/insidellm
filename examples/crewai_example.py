@@ -1,8 +1,7 @@
 """
-Example script to test InsideLLM CrewAI integration.
-
-This script demonstrates how to use the CrewAI callback handler
-to automatically track agent actions, task executions, and LLM calls.
+InsideLLM CrewAI Integration Test Suite (Using Real Client)
+==========================================================
+This version uses the real InsideLLMClient instead of mocks.
 """
 
 import os
@@ -11,8 +10,7 @@ import time
 import logging
 from typing import Dict, Any
 from insidellm.utils import generate_uuid
-# Add the parent directory to the Python path (adjust as needed)
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import insidellm
 
 # Configure logging
 logging.basicConfig(
@@ -48,26 +46,20 @@ def check_dependencies():
     return True
 
 
-def setup_mock_insidellm_client():
+def setup_real_insidellm_client():
     """
-    Create a mock InsideLLM client for testing purposes.
-    Replace this with your actual InsideLLM client initialization.
+    Initialize the real InsideLLM client for testing.
     """
-    class MockInsideLLMClient:
-        def __init__(self):
-            self.events = []
-            logger.info("Mock InsideLLM client initialized")
-        
-        def log_event(self, event):
-            """Mock event logging - just print and store."""
-            self.events.append(event)
-            logger.info(f"📝 Event logged: {event.event_type} - {event.payload.get('reasoning_type', event.payload.get('tool_name', 'unknown'))}")
-            
-        def flush(self):
-            """Mock flush - just log count."""
-            logger.info(f"🔄 Flushed {len(self.events)} events")
-    
-    return MockInsideLLMClient()
+    try:
+        client = insidellm.initialize(
+            api_key=os.getenv("INSIDELLM_API_KEY", "your_api_key_here"),
+            local_testing=True  # Set to False for production
+        )
+        logger.info("✅ Real InsideLLM client initialized")
+        return client
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize InsideLLM client: {e}")
+        raise
 
 
 def create_test_crew():
@@ -135,9 +127,9 @@ def create_test_crew():
         raise
 
 
-def test_callback_integration():
-    """Test the CrewAI callback integration."""
-    logger.info("🚀 Starting CrewAI Integration Test")
+def test_callback_integration(client):
+    """Test the CrewAI callback integration with real client."""
+    logger.info("🚀 Starting CrewAI Integration Test (Real Client)")
     
     # Check dependencies
     if not check_dependencies():
@@ -145,19 +137,11 @@ def test_callback_integration():
         return False
     
     try:
-        # Import the integration
-        from insidellm.crewai_integration import (
-            CrewAIInsideLLMCallbackHandler,
-            create_crew_with_callback
-        )
-        logger.info("✅ Successfully imported CrewAI integration")
+        from insidellm.crewai_integration import CrewAIInsideLLMCallbackHandler
         
-        # Setup mock client
-        mock_client = setup_mock_insidellm_client()
-        
-        # Create callback handler
+        # Create callback handler with real client
         callback_handler = CrewAIInsideLLMCallbackHandler(
-            client=mock_client,
+            client=client,
             user_id=generate_uuid(),
             run_id=generate_uuid(),
             metadata={"test_environment": True, "version": "1.0.0"},
@@ -167,14 +151,14 @@ def test_callback_integration():
             track_task_execution=True,
             track_errors=True
         )
-        logger.info("✅ Callback handler created")
+        logger.info("✅ Callback handler created with real InsideLLM client")
         
         # Create test crew
         crew, agents, tasks = create_test_crew()
         logger.info("✅ Test crew created")
         
         # Test manual callback methods
-        logger.info("🧪 Testing manual callback methods...")
+        logger.info("🧪 Testing callback methods with real client...")
         
         # Test crew start/end
         crew_data = {"name": "Test Crew", "agent_count": len(agents), "task_count": len(tasks)}
@@ -188,10 +172,7 @@ def test_callback_integration():
                 "backstory": agent.backstory
             }
             callback_handler.on_agent_start(agent.role, agent_data)
-            
-            # Simulate some work
             time.sleep(0.1)
-            
             callback_handler.on_agent_end(agent.role, f"Agent {agent.role} completed successfully")
         
         # Test task callbacks
@@ -202,10 +183,7 @@ def test_callback_integration():
                 "agent": task.agent.role if task.agent else "unknown"
             }
             callback_handler.on_task_start(f"task_{tasks.index(task)}", task_data)
-            
-            # Simulate some work
             time.sleep(0.1)
-            
             callback_handler.on_task_end(f"task_{tasks.index(task)}", "Task completed successfully")
         
         # Test tool callbacks
@@ -270,13 +248,8 @@ def test_callback_integration():
         # Flush events
         callback_handler.flush_events()
         
-        # Print summary
-        logger.info(f"🎉 Test completed! Logged {len(mock_client.events)} events:")
-        for i, event in enumerate(mock_client.events, 1):
-            event_info = event.payload.get('reasoning_type', 
-                        event.payload.get('tool_name', 
-                        event.payload.get('custom_event_type', 'unknown')))
-            logger.info(f"  {i}. {event.event_type} - {event_info}")
+        logger.info("✅ All events sent to real InsideLLM client")
+        logger.info("ℹ️  Check your InsideLLM dashboard for the logged events")
         
         return True
         
@@ -287,9 +260,9 @@ def test_callback_integration():
         return False
 
 
-def test_crew_execution_with_callback():
-    """Test actual crew execution with callback integration."""
-    logger.info("🚀 Testing actual crew execution with callbacks")
+def test_crew_execution_with_callback(client):
+    """Test actual crew execution with real InsideLLM client."""
+    logger.info("🚀 Testing actual crew execution with real callbacks")
     
     try:
         from insidellm.crewai_integration import (
@@ -297,12 +270,9 @@ def test_crew_execution_with_callback():
             create_crew_with_callback
         )
         
-        # Setup mock client
-        mock_client = setup_mock_insidellm_client()
-        
-        # Create callback handler
+        # Create callback handler with real client
         callback_handler = CrewAIInsideLLMCallbackHandler(
-            client=mock_client,
+            client=client,
             user_id="execution_test_user",
             run_id="execution_test_run",
             metadata={"test_type": "execution", "version": "1.0.0"}
@@ -321,12 +291,11 @@ def test_crew_execution_with_callback():
             )
             logger.info("✅ Crew created with callback integration")
             
-            # Note: Actual execution would require API keys and might be expensive
-            # For testing, we'll just verify the crew is properly configured
-            logger.info("✅ Crew configuration verified")
-            logger.info("ℹ️  To test full execution, ensure you have proper API keys configured")
+            # Note: Actual execution would require API keys
+            logger.info("ℹ️  To test full execution, uncomment the kickoff() line")
+            logger.info("ℹ️  Ensure you have proper API keys configured")
             
-            # Uncomment the following lines to test actual execution:
+            # Uncomment to test actual execution:
             # logger.info("🔄 Starting crew execution...")
             # result = crew_with_callback.kickoff()
             # logger.info(f"✅ Crew execution completed: {result}")
@@ -343,10 +312,16 @@ def test_crew_execution_with_callback():
 
 
 def main():
-    """Main function to run all tests."""
+    """Main function to run all tests with real client."""
     logger.info("=" * 60)
-    logger.info("🧪 InsideLLM CrewAI Integration Test Suite")
+    logger.info("🧪 InsideLLM CrewAI Integration Test Suite (Real Client)")
     logger.info("=" * 60)
+    
+    # Initialize real InsideLLM client
+    try:
+        client = setup_real_insidellm_client()
+    except Exception:
+        return False
     
     success_count = 0
     total_tests = 2
@@ -355,7 +330,7 @@ def main():
     logger.info("\n" + "=" * 40)
     logger.info("Test 1: Callback Integration")
     logger.info("=" * 40)
-    if test_callback_integration():
+    if test_callback_integration(client):
         logger.info("✅ Test 1 PASSED")
         success_count += 1
     else:
@@ -365,7 +340,7 @@ def main():
     logger.info("\n" + "=" * 40)
     logger.info("Test 2: Crew Execution with Callback")
     logger.info("=" * 40)
-    if test_crew_execution_with_callback():
+    if test_crew_execution_with_callback(client):
         logger.info("✅ Test 2 PASSED")
         success_count += 1
     else:
@@ -378,9 +353,9 @@ def main():
     logger.info(f"Tests passed: {success_count}/{total_tests}")
     
     if success_count == total_tests:
-        logger.info("🎉 All tests passed! The CrewAI integration is working correctly.")
+        logger.info("🎉 All tests passed! Check InsideLLM dashboard for events.")
     else:
-        logger.error(f"❌ {total_tests - success_count} test(s) failed. Please check the logs above.")
+        logger.error(f"❌ {total_tests - success_count} test(s) failed.")
     
     return success_count == total_tests
 

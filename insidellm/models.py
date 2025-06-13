@@ -46,6 +46,9 @@ class EventType(str, Enum):
     SESSION_START = "run.start"
     SESSION_END = "run.end"
     PERFORMANCE_METRIC = "performance_metric"
+    
+    # Custom Events
+    CUSTOM_EVENT = "custom.event" 
 
 
 # Payload Models for each event type

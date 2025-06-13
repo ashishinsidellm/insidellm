@@ -497,7 +497,7 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.CUSTOM,
+            event_type=EventType.CUSTOM_EVENT,
             parent_event_id=parent_event_id,
             metadata=self.metadata,
             payload={
