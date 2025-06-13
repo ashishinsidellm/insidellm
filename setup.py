@@ -38,6 +38,8 @@ setup(
     ],
     extras_require={
         "langchain": ["langchain>=0.1.0"],
+        "mistral": ["mistralai>=0.0.7"],
+        "crewai": ["crewai>=0.1.0"],
         "dev": [
             "pytest>=7.0.0",
             "pytest-asyncio>=0.21.0",
