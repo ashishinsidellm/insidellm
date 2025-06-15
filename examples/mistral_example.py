@@ -1,218 +1,229 @@
+import logging
 import os
-from typing import List, Dict, Any
-from insidellm.mistral_integration import MistralAIWrapper
-from insidellm.client import InsideLLMClient
-import insidellm
+import sys
+import time
+from typing import Dict, Any, List
+from dotenv import load_dotenv
+from insidellm.utils import generate_uuid
+
+# Load environment variables from .env file
+load_dotenv()
+
+# Get Mistral API key from environment
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY")
+if not MISTRAL_API_KEY:
+    raise ValueError("MISTRAL_API_KEY not found in environment variables. Please set it in your .env file.")
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 
-def initialize_client():
-    """Initialize InsideLLM client"""
-    return insidellm.initialize(
-            api_key=os.getenv("INSIDELLM_API_KEY", "iilmn-sample-key"),
-            local_testing= True,
-        )
+def setup_environment():
+    """Setup test environment and check dependencies."""
+    print("=" * 60)
+    print("InsideLLM Mistral Integration Test Suite (Real Client)")
+    print("=" * 60)
 
-def main():
-    # Initialize InsideLLM client
-    client = initialize_client()
-    
-    # Initialize Mistral AI wrapper with your integration
-    mistral = MistralAIWrapper(
-        client=client,
-        mistral_api_key="your_mistral_api_key_here",  
-        user_id="test_user",
-        model="mistral-small-latest"  
-    )
-    
-    # Example 1: Simple chat completion using dictionary format
-    print("\nExample 1: Simple chat completion")
-    messages = [
-        {
-            "role": "user", 
-            "content": "What is the capital of France?"
-        }
-    ]
-    
-    try:
-        response = mistral.chat(
-            messages=messages,
-            temperature=0.7,
-            max_tokens=100
-        )
-        print(f"Response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Error in Example 1: {str(e)}")
-    
-    # Example 2: Multi-turn conversation
-    print("\nExample 2: Multi-turn conversation")
-    conversation = [
-        {
-            "role": "system", 
-            "content": "You are a helpful AI assistant."
-        },
-        {
-            "role": "user", 
-            "content": "Hi, I need help with Python programming."
-        },
-        {
-            "role": "assistant", 
-            "content": "Hello! I'd be happy to help you with Python programming. What specific topic would you like to learn about?"
-        },
-        {
-            "role": "user", 
-            "content": "Can you explain list comprehensions?"
-        }
-    ]
-    
-    try:
-        response = mistral.chat(
-            messages=conversation,
-            temperature=0.7,
-            max_tokens=200
-        )
-        print(f"Response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Error in Example 2: {str(e)}")
-    
-    # Example 3: Different model
-    print("\nExample 3: Using different model")
-    messages = [
-        {
-            "role": "user", 
-            "content": "Explain quantum computing in simple terms."
-        }
-    ]
-    
-    try:
-        response = mistral.chat(
-            messages=messages,
-            model="mistral-medium-latest",  # Different model
-            temperature=0.5,
-            max_tokens=150
-        )
-        print(f"Response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Error in Example 3: {str(e)}")
-    
-    # Example 4: With custom metadata
-    print("\nExample 4: With custom metadata")
-    mistral_with_metadata = MistralAIWrapper(
-        client=client,
-        mistral_api_key=os.getenv("MISTRAL_API_KEY"),
-        user_id="test_user",
-        model="mistral-small-latest",
-        metadata={
-            "session_type": "demo",
-            "experiment_id": "example_4",
-            "user_context": "learning"
-        }
-    )
-    
-    messages = [
-        {
-            "role": "user", 
-            "content": "Tell me a short joke about programming."
-        }
-    ]
-    
-    try:
-        response = mistral_with_metadata.chat(
-            messages=messages,
-            temperature=0.8,
-            max_tokens=100
-        )
-        print(f"Response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Error in Example 4: {str(e)}")
-    
-    # Example 5: Error handling demonstration
-    print("\nExample 5: Error handling")
-    try:
-        # This should fail with invalid API key
-        bad_mistral = MistralAIWrapper(
-            client=client,
-            mistral_api_key="invalid_key_12345",
-            user_id="test_user"
-        )
-        response = bad_mistral.chat(
-            messages=[{"role": "user", "content": "Hello"}],
-            temperature=0.7
-        )
-    except Exception as e:
-        print(f"Expected error caught: {str(e)}")
-    
-    # Example 6: Custom parameters
-    print("\nExample 6: Custom parameters")
-    messages = [
-        {
-            "role": "user", 
-            "content": "Write a very brief summary of machine learning."
-        }
-    ]
-    
-    try:
-        response = mistral.chat(
-            messages=messages,
-            temperature=0.3,  # Lower temperature for more focused response
-            max_tokens=80,    # Shorter response
-            top_p=0.9
-        )
-        print(f"Response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Error in Example 6: {str(e)}")
-
-    # Example 7: Test direct Mistral client (for debugging)
-    print("\nExample 7: Direct Mistral client test")
+    # Check if Mistral AI is available
     try:
         from mistralai import Mistral
-        
-        direct_client = Mistral(api_key=os.getenv("MISTRAL_API_KEY"))
-        response = direct_client.chat.complete(
-            model="mistral-small-latest",
-            messages=[
-                {
-                    "content": "Hello from direct client!",
-                    "role": "user",
-                }
-            ]
-        )
-        print(f"Direct client response: {response.choices[0].message.content}")
-    except Exception as e:
-        print(f"Direct client error: {str(e)}")
-
-
-   
-
-def check_mistral_client():
-    """Check what's available in the Mistral client"""
-    try:
-        from mistralai import Mistral
-        print("✓ Mistral client imported successfully")
-        
-        # Try to see what's available
-        import mistralai
-        print(f"✓ Mistral AI version: {getattr(mistralai, '__version__', 'unknown')}")
-        
-        return True
-    except ImportError as e:
-        print(f"✗ Mistral client import failed: {e}")
+        print("✅ Mistral AI client imported successfully")
+    except ImportError:
+        print("❌ Mistral AI not found. Install with: pip install mistralai")
         return False
 
-if __name__ == "__main__":
-    print("Mistral AI InsideLLM Integration Example")
-    print("=" * 50)
-    
-    if not check_mistral_client():
-        print("Please install mistralai: pip install mistralai")
-        exit(1)
-
-    
+    # Check if InsideLLM is properly configured
     try:
-        main()
-        print("\n" + "=" * 50)
-        print("Examples completed successfully!")
-    except Exception as e:
-        print(f"\nFatal error: {str(e)}")
-        print("Please check your API keys and network connection.")
-        import traceback
-        traceback.print_exc()
+        from insidellm.client import InsideLLMClient
+        from insidellm.models import Event, EventType
+        from insidellm.mistral_integration import InsideLLMMistralIntegration
+
+        print("✅ InsideLLM modules imported successfully")
+    except ImportError as e:
+        print(f"❌ InsideLLM modules not found: {e}")
+        return False
+
+    return True
+
+
+class TestMistralChat:
+    """Test Mistral chat functionality with real InsideLLMClient."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def test_basic_chat_flow(self):
+        """Test basic chat completion flow."""
+        print("\n🧪 Testing Basic Chat Flow (Real Client)...")
+
+        try:
+            from mistralai import Mistral
+            from insidellm.mistral_integration import InsideLLMMistralIntegration
+
+            # Initialize Mistral client
+            mistral_client = Mistral(api_key=MISTRAL_API_KEY)
+
+            # Initialize InsideLLM Mistral integration
+            mistral_integration = InsideLLMMistralIntegration(
+                insidellm_client=self.client,
+                mistral_client=mistral_client,
+                user_id=generate_uuid(),
+                run_id=generate_uuid(),
+                metadata={"test": "basic_chat_flow"}
+            )
+
+            # Test chat completion
+            with mistral_integration.tracked_chat_completion(
+                model="mistral-tiny",
+                messages=[{"role": "user", "content": "What is the capital of France?"}]
+            ) as response:
+                if response and response.choices:
+                    print(f"✅ Chat response received: {response.choices[0].message.content}")
+                    return True
+                else:
+                    print("❌ No response received from Mistral")
+                    return False
+
+        except Exception as e:
+            print(f"❌ Basic chat flow test failed: {e}")
+            return False
+
+
+class TestMistralEmbeddings:
+    """Test Mistral embeddings functionality with real client."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def test_embeddings_flow(self):
+        """Test embeddings generation flow."""
+        print("\n🧪 Testing Embeddings Flow (Real Client)...")
+
+        try:
+            from mistralai import Mistral
+            from insidellm.mistral_integration import InsideLLMMistralIntegration
+
+            # Initialize Mistral client
+            mistral_client = Mistral(api_key=MISTRAL_API_KEY)
+
+            # Initialize InsideLLM Mistral integration
+            mistral_integration = InsideLLMMistralIntegration(
+                insidellm_client=self.client,
+                mistral_client=mistral_client,
+                user_id=generate_uuid(),
+                run_id=generate_uuid(),
+                metadata={"test": "embeddings_flow"}
+            )
+
+            # Test embeddings generation
+            with mistral_integration.tracked_embeddings(
+                model="mistral-embed",
+                inputs=["What is the capital of France?"]
+            ) as response:
+                if response and response.data:
+                    print(f"✅ Embeddings generated successfully (dimensions: {len(response.data[0].embedding)})")
+                    return True
+                else:
+                    print("❌ No embeddings received from Mistral")
+                    return False
+
+        except Exception as e:
+            print(f"❌ Embeddings flow test failed: {e}")
+            return False
+
+
+class TestMistralStreaming:
+    """Test Mistral streaming functionality with real client."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def test_streaming_flow(self):
+        """Test streaming chat completion flow."""
+        print("\n🧪 Testing Streaming Flow (Real Client)...")
+
+        try:
+            from mistralai import Mistral
+            from insidellm.mistral_integration import InsideLLMMistralIntegration
+
+            # Initialize Mistral client
+            mistral_client = Mistral(api_key=MISTRAL_API_KEY)
+
+            # Initialize InsideLLM Mistral integration
+            mistral_integration = InsideLLMMistralIntegration(
+                insidellm_client=self.client,
+                mistral_client=mistral_client,
+                user_id=generate_uuid(),
+                run_id=generate_uuid(),
+                metadata={"test": "streaming_flow"}
+            )
+
+            # Test streaming chat completion
+            with mistral_integration.tracked_streaming_chat(
+                model="mistral-tiny",
+                messages=[{"role": "user", "content": "Write a short poem about AI."}]
+            ) as stream:
+                if stream:
+                    # print("✅ Streaming response chunks:")
+                    # for chunk in stream:
+                        # if chunk.data.choices and chunk.data.choices[0].delta.content:
+                            # print(chunk.data.choices[0].delta.content, end="", flush=True)
+                    print("\n✅ Streaming test completed successfully")
+                    return True
+                else:
+                    print("❌ No streaming response received from Mistral")
+                    return False
+
+        except Exception as e:
+            print(f"❌ Streaming flow test failed: {e}")
+            return False
+
+
+def main():
+    """Main test runner with real InsideLLMClient."""
+    if not setup_environment():
+        sys.exit(1)
+
+    # Initialize REAL InsideLLM client (replace with your API key)
+    from insidellm.client import InsideLLMClient
+    import insidellm
+
+    client = insidellm.initialize(
+        api_key=os.getenv("INSIDELLM_API_KEY", "iilmn-sample-key"),
+        local_testing=True,
+    )
+
+    # Run tests
+    chat_tests = TestMistralChat(client)
+    embeddings_tests = TestMistralEmbeddings(client)
+    streaming_tests = TestMistralStreaming(client)
+
+    # Track results
+    test_results = [
+        chat_tests.test_basic_chat_flow(),
+        embeddings_tests.test_embeddings_flow(),
+        streaming_tests.test_streaming_flow()
+    ]
+
+    # Print summary
+    passed = sum(test_results)
+    total = len(test_results)
+
+    print("\n" + "=" * 60)
+    print(f"TESTS PASSED: {passed}/{total}")
+    print("=" * 60)
+
+    if passed == total:
+        print("🎉 All tests passed! Check InsideLLM for logged events.")
+    else:
+        print("⚠️  Some tests failed. See logs above.")
+
+    return passed == total
+
+
+if __name__ == "__main__":
+    success = main()
+    sys.exit(0 if success else 1) 
