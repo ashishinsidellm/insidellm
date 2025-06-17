@@ -117,11 +117,17 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.AGENT_REASONING,
+            event_type=EventType.CHAIN_START,
             metadata=self.metadata,
             payload={
-                'reasoning_type': 'crew_start',
-                'crew_info': crew_data,
+                'chain_name': 'crew_execution',
+                'chain_type': 'crewai',
+                'inputs': crew_data,
+                'chain_metadata': {
+                    'crew_name': crew_data.get('name', 'unknown'),
+                    'agent_count': crew_data.get('agent_count', 0),
+                    'task_count': crew_data.get('task_count', 0)
+                },
                 'start_time': get_iso_timestamp()
             }
         )
@@ -137,12 +143,18 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.AGENT_RESPONSE,
+            event_type=EventType.CHAIN_END,
             metadata=self.metadata,
             payload={
-                'response_type': 'crew_end',
-                'crew_info': crew_data,
-                'result': str(result),
+                'chain_name': 'crew_execution',
+                'chain_type': 'crewai',
+                'outputs': {'result': str(result)},
+                'chain_metadata': {
+                    'crew_name': crew_data.get('name', 'unknown'),
+                    'agent_count': crew_data.get('agent_count', 0),
+                    'task_count': crew_data.get('task_count', 0)
+                },
+                'success': True,
                 'end_time': get_iso_timestamp()
             }
         )
@@ -166,14 +178,17 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.AGENT_REASONING,
+            event_type=EventType.AGENT_PLANNING,
             metadata=self.metadata,
             payload={
-                'reasoning_type': 'agent_start',
+                'plan_type': 'agent_start',
                 'agent_name': agent_name,
                 'agent_role': agent_data.get('role', 'unknown'),
                 'agent_goal': agent_data.get('goal', ''),
                 'agent_backstory': agent_data.get('backstory', ''),
+                'planned_actions': [],
+                'planning_time_ms': 0,
+                'plan_confidence': 1.0,
                 'start_time': get_iso_timestamp()
             }
         )
@@ -202,9 +217,12 @@ class CrewAIInsideLLMCallbackHandler:
             payload={
                 'response_type': 'agent_end',
                 'agent_name': agent_name,
-                'result': str(result),
-                'execution_time_ms': execution_time_ms,
-                'end_time': get_iso_timestamp()
+                'response_text': str(result),
+                'response_confidence': 1.0,
+                'response_metadata': {
+                    'execution_time_ms': execution_time_ms,
+                    'end_time': get_iso_timestamp()
+                }
             }
         )
         
@@ -227,16 +245,17 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.TOOL_CALL,  # Tasks are similar to tool calls in context
+            event_type=EventType.CHAIN_START,
             metadata=self.metadata,
             payload={
-                'tool_name': f"task_{task_name}",
-                'tool_type': 'crewai_task',
-                'parameters': {
+                'chain_name': f"task_{task_name}",
+                'chain_type': 'crewai_task',
+                'inputs': {
                     'description': task_data.get('description', ''),
                     'expected_output': task_data.get('expected_output', ''),
                     'agent': task_data.get('agent', 'unknown')
                 },
+                'chain_metadata': task_data,
                 'start_time': get_iso_timestamp()
             }
         )
@@ -260,12 +279,13 @@ class CrewAIInsideLLMCallbackHandler:
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.TOOL_RESPONSE,
+            event_type=EventType.CHAIN_END,
             metadata=self.metadata,
             payload={
-                'tool_name': f"task_{task_name}",
-                'tool_type': 'crewai_task',
-                'response_data': str(result),
+                'chain_name': f"task_{task_name}",
+                'chain_type': 'crewai_task',
+                'outputs': {'result': str(result)},
+                'chain_metadata': context.get('data', {}),
                 'execution_time_ms': execution_time_ms,
                 'success': True,
                 'end_time': get_iso_timestamp()
@@ -377,7 +397,8 @@ class CrewAIInsideLLMCallbackHandler:
                 'provider': 'crewai_llm',
                 'prompt': prompt,
                 'parameters': kwargs,
-                'messages': messages
+                'messages': messages,
+                'system_message': next((msg['content'] for msg in messages if msg.get('role') == 'system'), None)
             }
         )
         
@@ -429,6 +450,7 @@ class CrewAIInsideLLMCallbackHandler:
                 'response_text': response_text,
                 'response_time_ms': response_time_ms,
                 'usage': usage,
+                'finish_reason': getattr(response_obj.choices[0], 'finish_reason', None) if response_obj.choices else None,
                 'response_metadata': str(response_obj)
             }
         )

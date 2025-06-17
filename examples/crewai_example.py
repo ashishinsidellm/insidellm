@@ -82,14 +82,19 @@ def create_test_crew():
                 except Exception as e:
                     return f"Error calculating {expression}: {str(e)}"
         
-        # Create agents
+        # Create agents with detailed metadata
         researcher = Agent(
             role="Research Analyst",
             goal="Gather and analyze information about AI trends",
             backstory="You are an experienced research analyst specializing in AI and technology trends.",
             verbose=True,
             allow_delegation=False,
-            tools=[CalculatorTool()]
+            tools=[CalculatorTool()],
+            metadata={
+                "expertise": ["AI", "Technology Trends", "Data Analysis"],
+                "experience_level": "Senior",
+                "specialization": "AI Research"
+            }
         )
         
         writer = Agent(
@@ -97,27 +102,50 @@ def create_test_crew():
             goal="Create engaging content based on research findings",
             backstory="You are a skilled content writer who can transform complex research into accessible content.",
             verbose=True,
-            allow_delegation=False
+            allow_delegation=False,
+            metadata={
+                "expertise": ["Content Writing", "Technical Writing", "Blog Posts"],
+                "experience_level": "Senior",
+                "specialization": "Technical Content"
+            }
         )
         
-        # Create tasks
+        # Create tasks with detailed metadata
         research_task = Task(
             description="Research the current state of AI agents and their applications. Use the calculator tool to compute some statistics if needed.",
             expected_output="A comprehensive report on AI agents with key statistics",
-            agent=researcher
+            agent=researcher,
+            metadata={
+                "task_type": "research",
+                "complexity": "high",
+                "estimated_duration": "30 minutes",
+                "required_tools": ["Calculator"]
+            }
         )
         
         writing_task = Task(
             description="Write a blog post about AI agents based on the research findings",
             expected_output="A well-structured blog post about AI agents",
-            agent=writer
+            agent=writer,
+            metadata={
+                "task_type": "content_creation",
+                "complexity": "medium",
+                "estimated_duration": "20 minutes",
+                "content_format": "blog_post"
+            }
         )
         
-        # Create crew
+        # Create crew with metadata
         crew = Crew(
             agents=[researcher, writer],
             tasks=[research_task, writing_task],
-            verbose=True
+            verbose=True,
+            metadata={
+                "project_name": "AI Agents Blog Post",
+                "project_type": "content_creation",
+                "team_size": 2,
+                "estimated_completion_time": "1 hour"
+            }
         )
         
         return crew, [researcher, writer], [research_task, writing_task]
@@ -144,7 +172,12 @@ def test_callback_integration(client):
             client=client,
             user_id=generate_uuid(),
             run_id=generate_uuid(),
-            metadata={"test_environment": True, "version": "1.0.0"},
+            metadata={
+                "test_environment": True,
+                "version": "1.0.0",
+                "test_type": "integration",
+                "framework": "crewai"
+            },
             track_llm_calls=True,
             track_tool_calls=True,
             track_agent_actions=True,
@@ -160,49 +193,99 @@ def test_callback_integration(client):
         # Test manual callback methods
         logger.info("🧪 Testing callback methods with real client...")
         
-        # Test crew start/end
-        crew_data = {"name": "Test Crew", "agent_count": len(agents), "task_count": len(tasks)}
-        callback_handler.on_crew_start(crew_data)
+        # Test crew start/end with detailed metadata
+        crew_data = {
+            "name": "Test Crew",
+            "agent_count": len(agents),
+            "task_count": len(tasks),
+            "metadata": crew.metadata,
+            "start_time": time.time()
+        }
+        callback_handler.on_crew_start(
+            crew=crew,
+            metadata={
+                "crew_name": crew.name,
+                "agent_count": len(crew.agents),
+                "task_count": len(crew.tasks),
+                "crew_type": "research_and_writing",
+                "crew_metadata": {
+                    "project_name": "AI Research Project",
+                    "project_type": "Research and Content Creation",
+                    "team_size": len(crew.agents),
+                    "estimated_completion_time": "2 hours"
+                }
+            }
+        )
         
-        # Test agent callbacks
+        # Test agent callbacks with detailed metadata
         for agent in agents:
             agent_data = {
                 "role": agent.role,
                 "goal": agent.goal,
-                "backstory": agent.backstory
+                "backstory": agent.backstory,
+                "metadata": agent.metadata,
+                "tools": [tool.name for tool in agent.tools] if hasattr(agent, 'tools') else []
             }
             callback_handler.on_agent_start(agent.role, agent_data)
             time.sleep(0.1)
-            callback_handler.on_agent_end(agent.role, f"Agent {agent.role} completed successfully")
+            callback_handler.on_agent_end(agent.role, {
+                "result": f"Agent {agent.role} completed successfully",
+                "execution_time": time.time() - agent_data.get('start_time', time.time()),
+                "metadata": agent.metadata
+            })
         
-        # Test task callbacks
+        # Test task callbacks with detailed metadata
         for task in tasks:
             task_data = {
                 "description": task.description,
                 "expected_output": task.expected_output,
-                "agent": task.agent.role if task.agent else "unknown"
+                "agent": task.agent.role if task.agent else "unknown",
+                "metadata": task.metadata,
+                "start_time": time.time()
             }
             callback_handler.on_task_start(f"task_{tasks.index(task)}", task_data)
             time.sleep(0.1)
-            callback_handler.on_task_end(f"task_{tasks.index(task)}", "Task completed successfully")
+            callback_handler.on_task_end(f"task_{tasks.index(task)}", {
+                "result": "Task completed successfully",
+                "execution_time": time.time() - task_data.get('start_time', time.time()),
+                "metadata": task.metadata
+            })
         
-        # Test tool callbacks
+        # Test tool callbacks with detailed metadata
         tool_call_id = callback_handler.on_tool_start(
             "Calculator", 
             "2 + 2", 
-            {"context": "testing"}
+            {
+                "context": "testing",
+                "tool_type": "calculator",
+                "input_type": "mathematical_expression"
+            }
         )
         time.sleep(0.1)
-        callback_handler.on_tool_end(tool_call_id, "4")
+        callback_handler.on_tool_end(tool_call_id, {
+            "result": "4",
+            "execution_time": 0.1,
+            "success": True
+        })
         
-        # Test LLM callbacks (mock)
+        # Test LLM callbacks with detailed metadata
         callback_handler.log_pre_api_call(
             model="gpt-4",
-            messages=[{"role": "user", "content": "Hello, world!"}],
-            kwargs={"temperature": 0.7, "max_tokens": 100}
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": "Hello, world!"}
+            ],
+            kwargs={
+                "temperature": 0.7,
+                "max_tokens": 100,
+                "metadata": {
+                    "request_type": "chat_completion",
+                    "purpose": "testing"
+                }
+            }
         )
         
-        # Mock response object
+        # Mock response object with detailed metadata
         class MockResponse:
             def __init__(self):
                 self.choices = [MockChoice()]
@@ -211,6 +294,7 @@ def test_callback_integration(client):
         class MockChoice:
             def __init__(self):
                 self.message = MockMessage()
+                self.finish_reason = "stop"
         
         class MockMessage:
             def __init__(self):
@@ -230,20 +314,48 @@ def test_callback_integration(client):
             end_time=time.time()
         )
         
-        # Test error callback
+        # Test error callback with detailed metadata
         callback_handler.on_error(
             ValueError("Test error"),
-            {"context": "testing error handling"}
+            {
+                "context": "testing error handling",
+                "error_type": "test_error",
+                "error_code": "TEST_ERROR",
+                "timestamp": time.time()
+            }
         )
         
-        # Test custom event
+        # Test custom event with detailed metadata
         callback_handler.log_custom_event(
             "test_event",
-            {"message": "This is a custom test event", "value": 42}
+            {
+                "message": "This is a custom test event",
+                "value": 42,
+                "metadata": {
+                    "event_type": "test",
+                    "timestamp": time.time()
+                }
+            }
         )
         
-        # Test crew end
-        callback_handler.on_crew_end(crew_data, "Crew execution completed successfully")
+        # Test crew end with detailed metadata
+        callback_handler.on_crew_end(
+            crew=crew,
+            metadata={
+                "crew_name": crew.name,
+                "agent_count": len(crew.agents),
+                "task_count": len(crew.tasks),
+                "crew_type": "research_and_writing",
+                "crew_metadata": {
+                    "project_name": "AI Research Project",
+                    "project_type": "Research and Content Creation",
+                    "team_size": len(crew.agents),
+                    "estimated_completion_time": "2 hours"
+                },
+                "success": True,
+                "execution_time_ms": 1000
+            }
+        )
         
         # Flush events
         callback_handler.flush_events()

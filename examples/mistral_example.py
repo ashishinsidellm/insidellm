@@ -75,10 +75,13 @@ class TestMistralChat:
                 metadata={"test": "basic_chat_flow"}
             )
 
-            # Test chat completion
+            # Test chat completion with system message
             with mistral_integration.tracked_chat_completion(
                 model="mistral-tiny",
-                messages=[{"role": "user", "content": "What is the capital of France?"}]
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant."},
+                    {"role": "user", "content": "What is the capital of France?"}
+                ]
             ) as response:
                 if response and response.choices:
                     print(f"✅ Chat response received: {response.choices[0].message.content}")
@@ -118,10 +121,13 @@ class TestMistralEmbeddings:
                 metadata={"test": "embeddings_flow"}
             )
 
-            # Test embeddings generation
+            # Test embeddings generation with multiple inputs
             with mistral_integration.tracked_embeddings(
                 model="mistral-embed",
-                inputs=["What is the capital of France?"]
+                inputs=[
+                    "What is the capital of France?",
+                    "What is the capital of Germany?"
+                ]
             ) as response:
                 if response and response.data:
                     print(f"✅ Embeddings generated successfully (dimensions: {len(response.data[0].embedding)})")
@@ -161,16 +167,15 @@ class TestMistralStreaming:
                 metadata={"test": "streaming_flow"}
             )
 
-            # Test streaming chat completion
+            # Test streaming chat completion with system message
             with mistral_integration.tracked_streaming_chat(
                 model="mistral-tiny",
-                messages=[{"role": "user", "content": "Write a short poem about AI."}]
+                messages=[
+                    {"role": "system", "content": "You are a creative poet."},
+                    {"role": "user", "content": "Write a short poem about AI."}
+                ]
             ) as stream:
                 if stream:
-                    # print("✅ Streaming response chunks:")
-                    # for chunk in stream:
-                        # if chunk.data.choices and chunk.data.choices[0].delta.content:
-                            # print(chunk.data.choices[0].delta.content, end="", flush=True)
                     print("\n✅ Streaming test completed successfully")
                     return True
                 else:

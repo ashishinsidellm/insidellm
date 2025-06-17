@@ -59,23 +59,52 @@ class TestLLMCallbacks:
                 client=self.client,
                 user_id=generate_uuid(),
                 run_id=generate_uuid(),
-                metadata={"test": "basic_llm_flow"},
+                metadata={
+                    "test": "basic_llm_flow",
+                    "framework": "langchain",
+                    "test_type": "llm"
+                },
             )
 
-            # Simulate LLM start
+            # Simulate LLM start with system message
             run_id = generate_uuid()
             callback.on_llm_start(
-                serialized={"name": "gpt-3.5-turbo", "_type": "openai"},
+                serialized={
+                    "name": "gpt-3.5-turbo",
+                    "_type": "openai",
+                    "metadata": {
+                        "model_type": "chat",
+                        "provider": "openai"
+                    }
+                },
                 prompts=["What is the capital of France?"],
                 run_id=run_id,
+                metadata={
+                    "system_message": "You are a helpful assistant.",
+                    "temperature": 0.7
+                }
             )
 
-            # Simulate LLM end
+            # Simulate LLM end with detailed response
             mock_result = LLMResult(
                 generations=[[Generation(text="The capital of France is Paris.")]],
-                llm_output={"usage": {"total_tokens": 20}},
+                llm_output={
+                    "usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 10,
+                        "total_tokens": 20
+                    },
+                    "finish_reason": "stop"
+                },
             )
-            callback.on_llm_end(response=mock_result, run_id=run_id)
+            callback.on_llm_end(
+                response=mock_result,
+                run_id=run_id,
+                metadata={
+                    "response_time_ms": 1000,
+                    "success": True
+                }
+            )
 
             print("✅ Basic LLM flow test passed (check InsideLLM dashboard for events)")
             return True
@@ -102,21 +131,44 @@ class TestToolCallbacks:
                 client=self.client,
                 user_id=generate_uuid(),
                 run_id=generate_uuid(),
-                metadata={"test": "tool_flow"},
+                metadata={
+                    "test": "tool_flow",
+                    "framework": "langchain",
+                    "test_type": "tool"
+                },
             )
 
-            # Simulate tool start
+            # Simulate tool start with detailed metadata
             run_id = generate_uuid()
             callback.on_tool_start(
-                serialized={"name": "calculator", "_type": "math_tool"},
+                serialized={
+                    "name": "calculator",
+                    "_type": "math_tool",
+                    "metadata": {
+                        "tool_type": "calculator",
+                        "input_type": "mathematical_expression"
+                    }
+                },
                 input_str="2 + 2",
                 run_id=run_id,
+                metadata={
+                    "context": "testing",
+                    "start_time": time.time()
+                }
             )
 
             time.sleep(0.1)  # Simulate processing time
 
-            # Simulate tool end
-            callback.on_tool_end(output="4", run_id=run_id)
+            # Simulate tool end with detailed response
+            callback.on_tool_end(
+                output="4",
+                run_id=run_id,
+                metadata={
+                    "execution_time_ms": 100,
+                    "success": True,
+                    "end_time": time.time()
+                }
+            )
 
             print("✅ Tool usage flow test passed (check InsideLLM dashboard)")
             return True
@@ -137,34 +189,56 @@ class TestChainCallbacks:
         print("\n🧪 Testing Chain Execution Flow (Real Client)...")
 
         try:
+            import json
             from insidellm.langchain_integration import InsideLLMCallback
 
             callback = InsideLLMCallback(
                 client=self.client,
                 user_id=generate_uuid(),
                 run_id=generate_uuid(),
-                metadata={"test": "chain_flow", "chain_type": "qa"},
+                metadata={
+                    "test": "chain_flow",
+                    "framework": "langchain",
+                    "test_type": "chain",
+                    "chain_type": "qa"
+                },
             )
 
-            # Simulate chain start
+            # Simulate chain start with detailed metadata
             run_id = generate_uuid()
-            # Convert tags list to string if needed
-            tags_list = ["test", "qa"]
-            tags_str = ",".join(tags_list) if isinstance(tags_list, list) else tags_list
-            
             callback.on_chain_start(
-                serialized={"name": "qa_chain", "_type": "sequential"},
-                inputs={"question": "What is the capital of France?"},
+                serialized={
+                    "name": "qa_chain",
+                    "_type": "sequential",
+                    "metadata": json.dumps({"chain_type": "qa", "components": ["retriever", "llm"]})
+                },
+                inputs={
+                    "question": "What is the capital of France?",
+                    "context": "This is a test context."
+                },
                 run_id=run_id,
-                tags=tags_str
+                metadata={
+                    "start_time": time.time(),
+                    "chain_config": json.dumps({"temperature": 0.7, "max_tokens": 100})
+                },
+                tags="test,qa"  # Added as comma-separated string instead of list
             )
 
             time.sleep(0.1)  # Simulate processing time
 
-            # Simulate chain end
+            # Simulate chain end with detailed response
             callback.on_chain_end(
-                outputs={"answer": "The capital of France is Paris."},
-                run_id=run_id
+                outputs={
+                    "answer": "The capital of France is Paris.",
+                    "confidence": 0.95,
+                    "sources": ["test_context"]
+                },
+                run_id=run_id,
+                metadata={
+                    "execution_time_ms": 1000,
+                    "success": True,
+                    "end_time": time.time()
+                }
             )
 
             print("✅ Chain execution flow test passed (check InsideLLM dashboard)")

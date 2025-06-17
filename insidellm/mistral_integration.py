@@ -279,6 +279,7 @@ class InsideLLMMistralIntegration:
                 'provider': 'mistral',
                 'messages': [self._serialize_message(msg) for msg in messages],
                 'parameters': {k: v for k, v in kwargs.items() if k != 'messages'},
+                'system_message': next((msg['content'] for msg in messages if msg.get('role') == 'system'), None),
                 'function_info': function_info
             }
         )
@@ -331,7 +332,10 @@ class InsideLLMMistralIntegration:
                     'total_tokens': response.usage.total_tokens if response.usage else 0
                 },
                 'finish_reason': response.choices[0].finish_reason if response.choices else None,
-                'function_calls': function_calls
+                'function_calls': function_calls,
+                'response_metadata': {
+                    'function_info': request_info.get('function_info')
+                }
             }
         )
         
@@ -371,7 +375,10 @@ class InsideLLMMistralIntegration:
                 'model_name': model,
                 'provider': 'mistral',
                 'input_texts': input_data if isinstance(input_data, list) else [input_data],
-                'parameters': {k: v for k, v in kwargs.items() if k != 'input'}
+                'parameters': {k: v for k, v in kwargs.items() if k != 'input'},
+                'request_metadata': {
+                    'input_count': len(input_data) if isinstance(input_data, list) else 1
+                }
             }
         )
         
@@ -401,6 +408,9 @@ class InsideLLMMistralIntegration:
                 'usage': {
                     'prompt_tokens': response.usage.prompt_tokens if response.usage else 0,
                     'total_tokens': response.usage.total_tokens if response.usage else 0
+                },
+                'response_metadata': {
+                    'request_info': request_info
                 }
             }
         )
@@ -496,7 +506,10 @@ class InsideLLMMistralIntegration:
                 'provider': 'mistral',
                 'chunk_text': content,
                 'chunk_index': chunk_index,
-                'is_final': is_final
+                'is_final': is_final,
+                'chunk_metadata': {
+                    'timestamp': get_iso_timestamp()
+                }
             }
         )
         
@@ -519,7 +532,11 @@ class InsideLLMMistralIntegration:
                 'provider': 'mistral',
                 'response_text': full_content,
                 'response_time_ms': response_time_ms,
-                'streaming': True
+                'streaming': True,
+                'response_metadata': {
+                    'request_info': request_info,
+                    'chunk_count': request_info.get('chunk_count', 0)
+                }
             }
         )
         
@@ -538,7 +555,10 @@ class InsideLLMMistralIntegration:
                 'tool_name': func_call['function'],
                 'tool_type': 'mistral_function',
                 'call_id': func_call.get('id'),
-                'parameters': func_call.get('arguments', {})
+                'parameters': func_call.get('arguments', {}),
+                'tool_metadata': {
+                    'timestamp': get_iso_timestamp()
+                }
             }
         )
         
@@ -576,7 +596,8 @@ class InsideLLMMistralIntegration:
                 'context': {
                     'operation_type': operation_type,
                     'model': context.get('model', 'unknown'),
-                    'request_params': {k: v for k, v in context.items() if k not in ['messages', 'input']}
+                    'request_params': {k: v for k, v in context.items() if k not in ['messages', 'input']},
+                    'timestamp': get_iso_timestamp()
                 }
             }
         )
@@ -602,7 +623,10 @@ class InsideLLMMistralIntegration:
                 'metric_value': response_time_ms,
                 'metric_unit': 'ms',
                 'metric_type': 'gauge',
-                'provider': 'mistral'
+                'provider': 'mistral',
+                'metric_metadata': {
+                    'timestamp': get_iso_timestamp()
+                }
             }
         )
         
@@ -630,7 +654,10 @@ class InsideLLMMistralIntegration:
                             'metric_value': metric_value,
                             'metric_unit': 'tokens',
                             'metric_type': 'counter',
-                            'provider': 'mistral'
+                            'provider': 'mistral',
+                            'metric_metadata': {
+                                'timestamp': get_iso_timestamp()
+                            }
                         }
                     )
                     
@@ -682,7 +709,10 @@ class InsideLLMMistralIntegration:
             payload={
                 'session_id': self.run_id,
                 'session_type': 'mistral_chat',
-                'initial_context': session_context or {}
+                'initial_context': session_context or {},
+                'session_metadata': {
+                    'start_time': get_iso_timestamp()
+                }
             }
         )
         
@@ -701,7 +731,10 @@ class InsideLLMMistralIntegration:
             payload={
                 'session_id': self.run_id,
                 'session_summary': session_summary or {},
-                'exit_reason': exit_reason
+                'exit_reason': exit_reason,
+                'session_metadata': {
+                    'end_time': get_iso_timestamp()
+                }
             }
         )
         

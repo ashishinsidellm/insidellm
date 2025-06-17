@@ -160,7 +160,9 @@ class InsideLLMCallback(BaseCallbackHandler):
                 'model_name': model_name,
                 'provider': provider,
                 'prompt': combined_prompt,
-                'parameters': kwargs
+                'parameters': kwargs,
+                'system_message': kwargs.get('system_message'),
+                'messages': kwargs.get('messages')
             }
         )
         
@@ -266,7 +268,8 @@ class InsideLLMCallback(BaseCallbackHandler):
                 'provider': provider,
                 'response_text': response_text,
                 'response_time_ms': response_time_ms,
-                'usage': response.llm_output.get('usage', {}) if response.llm_output else {}
+                'usage': response.llm_output.get('usage', {}) if response.llm_output else {},
+                'finish_reason': response.llm_output.get('finish_reason') if response.llm_output else None
             }
         )
         
@@ -321,7 +324,9 @@ class InsideLLMCallback(BaseCallbackHandler):
             payload={
                 'chain_name': chain_name,
                 'inputs': inputs,
-                'parameters': kwargs
+                'parameters': kwargs,
+                'chain_type': serialized.get('_type', 'unknown'),
+                'chain_metadata': serialized
             }
         )
         
@@ -359,7 +364,10 @@ class InsideLLMCallback(BaseCallbackHandler):
             payload={
                 'chain_name': chain_name,
                 'outputs': outputs,
-                'execution_time_ms': execution_time_ms
+                'execution_time_ms': execution_time_ms,
+                'chain_type': call_info.get('serialized', {}).get('_type', 'unknown'),
+                'chain_metadata': call_info.get('serialized', {}),
+                'success': True
             }
         )
         
@@ -410,8 +418,9 @@ class InsideLLMCallback(BaseCallbackHandler):
             metadata=event_metadata,
             payload={
                 'tool_name': tool_name,
-                'input': input_str,
-                'parameters': kwargs
+                'tool_type': serialized.get('_type', 'unknown'),
+                'parameters': {'input': input_str},
+                'call_id': run_id_str
             }
         )
         
@@ -448,8 +457,11 @@ class InsideLLMCallback(BaseCallbackHandler):
             metadata=self.metadata,
             payload={
                 'tool_name': tool_name,
-                'output': output,
-                'execution_time_ms': execution_time_ms
+                'tool_type': call_info.get('serialized', {}).get('_type', 'unknown'),
+                'call_id': run_id_str,
+                'response_data': output,
+                'execution_time_ms': execution_time_ms,
+                'success': True
             }
         )
         
@@ -479,9 +491,14 @@ class InsideLLMCallback(BaseCallbackHandler):
             parent_event_id=self._get_parent_event_id(parent_run_id_str),
             metadata=self.metadata,
             payload={
-                'tool': action.tool,
-                'tool_input': action.tool_input,
-                'log': action.log
+                'plan_type': 'agent_action',
+                'planned_actions': [{
+                    'action': action.tool,
+                    'input': action.tool_input,
+                    'log': action.log
+                }],
+                'planning_time_ms': 0,
+                'plan_confidence': 1.0
             }
         )
         
@@ -511,8 +528,10 @@ class InsideLLMCallback(BaseCallbackHandler):
             parent_event_id=self._get_parent_event_id(parent_run_id_str),
             metadata=self.metadata,
             payload={
-                'return_values': finish.return_values,
-                'log': finish.log
+                'response_text': str(finish.return_values),
+                'response_type': 'agent_finish',
+                'response_confidence': 1.0,
+                'response_metadata': {'log': finish.log}
             }
         )
         
