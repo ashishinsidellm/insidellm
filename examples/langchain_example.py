@@ -1,9 +1,3 @@
-"""
-InsideLLM LangChain Integration Test Suite (Using Real Client)
-============================================================
-This version uses the real InsideLLMClient instead of mocks.
-"""
-
 import logging
 import os
 import sys
@@ -132,6 +126,54 @@ class TestToolCallbacks:
             return False
 
 
+class TestChainCallbacks:
+    """Test chain callback functionality with real client."""
+
+    def __init__(self, client):
+        self.client = client
+
+    def test_chain_execution_flow(self):
+        """Test chain start/end flow."""
+        print("\n🧪 Testing Chain Execution Flow (Real Client)...")
+
+        try:
+            from insidellm.langchain_integration import InsideLLMCallback
+
+            callback = InsideLLMCallback(
+                client=self.client,
+                user_id=generate_uuid(),
+                run_id=generate_uuid(),
+                metadata={"test": "chain_flow", "chain_type": "qa"},
+            )
+
+            # Simulate chain start
+            run_id = generate_uuid()
+            # Convert tags list to string if needed
+            tags_list = ["test", "qa"]
+            tags_str = ",".join(tags_list) if isinstance(tags_list, list) else tags_list
+            
+            callback.on_chain_start(
+                serialized={"name": "qa_chain", "_type": "sequential"},
+                inputs={"question": "What is the capital of France?"},
+                run_id=run_id,
+                tags=tags_str
+            )
+
+            time.sleep(0.1)  # Simulate processing time
+
+            # Simulate chain end
+            callback.on_chain_end(
+                outputs={"answer": "The capital of France is Paris."},
+                run_id=run_id
+            )
+
+            print("✅ Chain execution flow test passed (check InsideLLM dashboard)")
+            return True
+
+        except Exception as e:
+            print(f"❌ Chain execution flow test failed: {e}")
+            return False
+
 import insidellm
 
 
@@ -151,9 +193,14 @@ def main():
     # Run tests
     llm_tests = TestLLMCallbacks(client)
     tool_tests = TestToolCallbacks(client)
+    chain_tests = TestChainCallbacks(client)
 
     # Track results
-    test_results = [llm_tests.test_basic_llm_flow(), tool_tests.test_tool_usage_flow()]
+    test_results = [
+        llm_tests.test_basic_llm_flow(),
+        tool_tests.test_tool_usage_flow(),
+        chain_tests.test_chain_execution_flow()
+    ]
 
     # Print summary
     passed = sum(test_results)

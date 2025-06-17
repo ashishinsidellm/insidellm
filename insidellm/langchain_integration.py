@@ -475,7 +475,7 @@ class InsideLLMCallback(BaseCallbackHandler):
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.AGENT_ACTION,
+            event_type=EventType.AGENT_PLANNING,
             parent_event_id=self._get_parent_event_id(parent_run_id_str),
             metadata=self.metadata,
             payload={
@@ -507,7 +507,7 @@ class InsideLLMCallback(BaseCallbackHandler):
             event_id=generate_uuid(),
             run_id=self.run_id,
             user_id=self.user_id,
-            event_type=EventType.AGENT_FINISH,
+            event_type=EventType.AGENT_RESPONSE,
             parent_event_id=self._get_parent_event_id(parent_run_id_str),
             metadata=self.metadata,
             payload={
