@@ -472,3 +472,103 @@ def track_function_execution(
         
         return wrapper
     return decorator
+
+def track_chain_start(
+    chain_name: str,
+    chain_type: str,
+    inputs: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None
+) -> Callable[[F], F]:
+    """
+    Decorator to track chain start.
+    """
+    def decorator(func: F) -> F:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Get client
+            tracking_client = client or get_default_client()
+            current_run_id = tracking_client.get_current_run_id()
+            current_user_id = tracking_client.get_current_user_id()
+            
+            if not current_run_id or not current_user_id:
+                logger.warning("No active run context, chain start not tracked")
+                return func(*args, **kwargs)
+            parent_id_from_context = current_parent_event_id_var.get()
+            # Execute function and track timing
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                end_time = time.time()
+                execution_time_ms = int((end_time - start_time) * 1000)
+                
+                # Log chain start event
+                chain_start_event = Event(
+                    event_id=generate_uuid(),
+                    run_id=current_run_id,
+                    user_id=current_user_id,
+                    event_type=EventType.CHAIN_START,
+                    parent_event_id=parent_id_from_context,
+                    metadata=metadata,
+                    payload={
+                        'chain_name': chain_name,
+                        'chain_type': chain_type,
+                        'inputs': inputs
+                    }
+                )
+                tracking_client.log_event(chain_start_event)
+                current_parent_event_id_var.set(chain_start_event.event_id)
+                return result
+            except Exception as e:
+                end_time = time.time()
+                execution_time_ms = int((end_time - start_time) * 1000)
+                raise
+        return wrapper
+    return decorator
+
+def track_chain_end(
+    chain_name: str,
+    chain_type: str,
+    outputs: Dict[str, Any],
+    metadata: Optional[Dict[str, Any]] = None
+) -> Callable[[F], F]:
+    """
+    Decorator to track chain end.
+    """
+    def decorator(func: F) -> F:    
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Get client
+            tracking_client = client or get_default_client()
+            current_run_id = tracking_client.get_current_run_id()
+            current_user_id = tracking_client.get_current_user_id()
+            
+            if not current_run_id or not current_user_id:
+                logger.warning("No active run context, chain end not tracked")
+                return func(*args, **kwargs)
+            parent_id_from_context = current_parent_event_id_var.get()
+            # Execute function and track timing
+            start_time = time.time()
+            try:
+                result = func(*args, **kwargs)
+                end_time = time.time()
+                execution_time_ms = int((end_time - start_time) * 1000)
+                
+                # Log chain end event
+                chain_end_event = Event(
+                    event_id=generate_uuid(),
+                    run_id=current_run_id,
+                    user_id=current_user_id,
+                    event_type=EventType.CHAIN_END,
+                    parent_event_id=parent_id_from_context,
+                    metadata=metadata,
+                    payload={
+                        'chain_name': chain_name,
+                        'chain_type': chain_type,
+                        'outputs': outputs
+                    }
+                )
+                tracking_client.log_event(chain_end_event)
+                current_parent_event_id_var.set(chain_end_event.event_id)
+                return result
+            except Exception as e:
+                end_time = time.time()  
