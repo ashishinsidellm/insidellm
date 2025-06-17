@@ -8,7 +8,7 @@ import os
 import sys
 import time
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 from insidellm.utils import generate_uuid
 import insidellm
 
@@ -20,7 +20,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def check_dependencies():
+def check_dependencies() -> bool:
     """Check if all required dependencies are available."""
     missing_deps = []
     
@@ -46,10 +46,8 @@ def check_dependencies():
     return True
 
 
-def setup_real_insidellm_client():
-    """
-    Initialize the real InsideLLM client for testing.
-    """
+def setup_real_insidellm_client() -> insidellm.InsideLLMClient:
+    """Initialize the real InsideLLM client for testing."""
     try:
         client = insidellm.initialize(
             api_key=os.getenv("INSIDELLM_API_KEY", "your_api_key_here"),
@@ -62,7 +60,7 @@ def setup_real_insidellm_client():
         raise
 
 
-def create_test_crew():
+def create_test_crew() -> Tuple[Any, List[Any], List[Any]]:
     """Create a test crew with agents and tasks."""
     try:
         from crewai import Agent, Task, Crew
@@ -155,7 +153,7 @@ def create_test_crew():
         raise
 
 
-def test_callback_integration(client):
+def test_callback_integration(client: insidellm.InsideLLMClient) -> bool:
     """Test the CrewAI callback integration with real client."""
     logger.info("🚀 Starting CrewAI Integration Test (Real Client)")
     
@@ -193,37 +191,27 @@ def test_callback_integration(client):
         # Test manual callback methods
         logger.info("🧪 Testing callback methods with real client...")
         
-        # Test crew start/end with detailed metadata
-        crew_data = {
-            "name": "Test Crew",
-            "agent_count": len(agents),
-            "task_count": len(tasks),
-            "metadata": crew.metadata,
-            "start_time": time.time()
-        }
-        callback_handler.on_crew_start(
-            crew=crew,
-            metadata={
-                "crew_name": crew.name,
-                "agent_count": len(crew.agents),
-                "task_count": len(crew.tasks),
-                "crew_type": "research_and_writing",
-                "crew_metadata": {
-                    "project_name": "AI Research Project",
-                    "project_type": "Research and Content Creation",
-                    "team_size": len(crew.agents),
-                    "estimated_completion_time": "2 hours"
-                }
+        # Test crew start
+        callback_handler.on_crew_start({
+            "name": crew.name,
+            "agent_count": len(crew.agents),
+            "task_count": len(crew.tasks),
+            "crew_type": "research_and_writing",
+            "crew_metadata": {
+                "project_name": "AI Research Project",
+                "project_type": "Research and Content Creation",
+                "team_size": len(crew.agents),
+                "estimated_completion_time": "2 hours"
             }
-        )
+        })
         
-        # Test agent callbacks with detailed metadata
+        # Test agent callbacks
         for agent in agents:
             agent_data = {
                 "role": agent.role,
                 "goal": agent.goal,
                 "backstory": agent.backstory,
-                "metadata": agent.metadata,
+                "metadata": getattr(agent, "metadata", {}),
                 "tools": [tool.name for tool in agent.tools] if hasattr(agent, 'tools') else []
             }
             callback_handler.on_agent_start(agent.role, agent_data)
@@ -231,16 +219,16 @@ def test_callback_integration(client):
             callback_handler.on_agent_end(agent.role, {
                 "result": f"Agent {agent.role} completed successfully",
                 "execution_time": time.time() - agent_data.get('start_time', time.time()),
-                "metadata": agent.metadata
+                "metadata": getattr(agent, "metadata", {})
             })
         
-        # Test task callbacks with detailed metadata
+        # Test task callbacks
         for task in tasks:
             task_data = {
                 "description": task.description,
                 "expected_output": task.expected_output,
                 "agent": task.agent.role if task.agent else "unknown",
-                "metadata": task.metadata,
+                "metadata": getattr(task, "metadata", {}),
                 "start_time": time.time()
             }
             callback_handler.on_task_start(f"task_{tasks.index(task)}", task_data)
@@ -248,10 +236,10 @@ def test_callback_integration(client):
             callback_handler.on_task_end(f"task_{tasks.index(task)}", {
                 "result": "Task completed successfully",
                 "execution_time": time.time() - task_data.get('start_time', time.time()),
-                "metadata": task.metadata
+                "metadata": getattr(task, "metadata", {})
             })
         
-        # Test tool callbacks with detailed metadata
+        # Test tool callbacks
         tool_call_id = callback_handler.on_tool_start(
             "Calculator", 
             "2 + 2", 
@@ -268,7 +256,7 @@ def test_callback_integration(client):
             "success": True
         })
         
-        # Test LLM callbacks with detailed metadata
+        # Test LLM callbacks
         callback_handler.log_pre_api_call(
             model="gpt-4",
             messages=[
@@ -285,7 +273,7 @@ def test_callback_integration(client):
             }
         )
         
-        # Mock response object with detailed metadata
+        # Mock response object
         class MockResponse:
             def __init__(self):
                 self.choices = [MockChoice()]
@@ -314,7 +302,7 @@ def test_callback_integration(client):
             end_time=time.time()
         )
         
-        # Test error callback with detailed metadata
+        # Test error callback
         callback_handler.on_error(
             ValueError("Test error"),
             {
@@ -325,7 +313,7 @@ def test_callback_integration(client):
             }
         )
         
-        # Test custom event with detailed metadata
+        # Test custom event
         callback_handler.log_custom_event(
             "test_event",
             {
@@ -338,11 +326,10 @@ def test_callback_integration(client):
             }
         )
         
-        # Test crew end with detailed metadata
+        # Test crew end
         callback_handler.on_crew_end(
-            crew=crew,
-            metadata={
-                "crew_name": crew.name,
+            {
+                "name": crew.name,
                 "agent_count": len(crew.agents),
                 "task_count": len(crew.tasks),
                 "crew_type": "research_and_writing",
@@ -351,10 +338,9 @@ def test_callback_integration(client):
                     "project_type": "Research and Content Creation",
                     "team_size": len(crew.agents),
                     "estimated_completion_time": "2 hours"
-                },
-                "success": True,
-                "execution_time_ms": 1000
-            }
+                }
+            },
+            "Crew execution completed successfully"
         )
         
         # Flush events
@@ -372,7 +358,7 @@ def test_callback_integration(client):
         return False
 
 
-def test_crew_execution_with_callback(client):
+def test_crew_execution_with_callback(client: insidellm.InsideLLMClient) -> bool:
     """Test actual crew execution with real InsideLLM client."""
     logger.info("🚀 Testing actual crew execution with real callbacks")
     
@@ -423,7 +409,7 @@ def test_crew_execution_with_callback(client):
         return False
 
 
-def main():
+def main() -> bool:
     """Main function to run all tests with real client."""
     logger.info("=" * 60)
     logger.info("🧪 InsideLLM CrewAI Integration Test Suite (Real Client)")
