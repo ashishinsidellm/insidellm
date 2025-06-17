@@ -85,7 +85,7 @@ class TestLLMCallbacks:
                 }
             )
 
-            # Simulate LLM end with detailed response
+            # Simulate LLM end with detailed response if you want to use real LangChain response, uncomment the code below and use open_ai_api_key
             mock_result = LLMResult(
                 generations=[[Generation(text="The capital of France is Paris.")]],
                 llm_output={
@@ -97,6 +97,19 @@ class TestLLMCallbacks:
                     "finish_reason": "stop"
                 },
             )
+
+
+            # # Get real response from LangChain
+            # from langchain.chat_models import ChatOpenAI
+            # from langchain.schema import HumanMessage
+
+            # chat = ChatOpenAI(
+            #     temperature=0.7,
+            #     openai_api_key=os.getenv("OPENAI_API_KEY")
+            # )
+            # messages = [HumanMessage(content="What is the capital of France?")]
+            # result = chat.generate([messages]) 
+
             callback.on_llm_end(
                 response=mock_result,
                 run_id=run_id,
