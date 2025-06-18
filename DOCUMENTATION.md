@@ -1074,3 +1074,198 @@ There is a health check endpoint that can be used to verify connectivity to the 
 *   **Success Response:** `200 OK` (body might be simple like `{"status": "healthy"}` or empty).
 
 This direct API interaction provides flexibility but requires careful implementation of event formatting, batching, retries, and error handling, which the SDK normally manages for you.
+
+## Examples
+
+This section provides a complete, runnable example demonstrating some of the common use cases of the InsideLLM SDK. You can find more specialized examples in the `examples/` directory of the SDK repository.
+
+```python
+import os
+import time
+import insidellm
+from insidellm import Event, EventType, track_llm_call, track_tool_use
+
+def run_sdk_example():
+    print("Starting InsideLLM SDK Example...")
+
+    # 1. Initialize the SDK
+    # Ensure you have INSIDELLM_API_KEY set in your environment
+    # or pass it directly: api_key="YOUR_API_KEY"
+    try:
+        insidellm.initialize(
+            api_key=os.getenv("INSIDELLM_API_KEY", "docs-example-key"), # Replace with a real key for actual data sending
+            # For this example, let's assume a local/dev setup if no key is found
+            # In a real app, you'd want to ensure a valid key is present.
+            base_url="http://localhost:8080", # Example: local collector or mock server
+            batch_size=5, # Smaller batch size for quicker flushes in example
+            auto_flush_interval=10 # Flush every 10 seconds
+        )
+        print("SDK Initialized.")
+    except Exception as e:
+        print(f"Error initializing SDK: {e}")
+        return
+
+    client = insidellm.get_client()
+
+    # 2. Start a Run
+    run_id = client.start_run(
+        user_id="example_user_001",
+        metadata={"example_name": "full_sdk_demo", "environment": "documentation"}
+    )
+    print(f"Run started with ID: {run_id}")
+
+    # 3. Log a User Input event manually
+    user_input_event = Event.create_user_input(
+        run_id=run_id,
+        user_id=client.get_current_user_id(),
+        input_text="Hello InsideLLM, show me how the SDK works.",
+        channel="docs_example_script"
+    )
+    client.log_event(user_input_event)
+    print(f"Logged User Input event: {user_input_event.event_id}")
+
+    # 4. Use a function decorated with @track_llm_call
+    @track_llm_call(model_name="example-llm-turbo", provider="example_provider")
+    def get_llm_greeting(prompt: str):
+        print(f"  (Inside get_llm_greeting) Simulating LLM call for: {prompt}")
+        time.sleep(0.2) # Simulate network latency
+        return f"LLM says: Greetings! Processing your request: '{prompt}'"
+
+    llm_response_text = get_llm_greeting(user_input_event.payload["input_text"])
+    print(f"LLM greeting received: {llm_response_text}")
+    # LLM_REQUEST and LLM_RESPONSE events are automatically logged by the decorator.
+    # The LLM_RESPONSE will have the LLM_REQUEST as its parent_event_id.
+
+    # 5. Use a function decorated with @track_tool_use
+    @track_tool_use(tool_name="data_formatter", tool_type="utility_function")
+    def format_data_for_display(data: str, format_type: str = "uppercase"):
+        print(f"  (Inside format_data_for_display) Formatting data: {data[:20]}... as {format_type}")
+        time.sleep(0.1)
+        if format_type == "uppercase":
+            return data.upper()
+        elif format_type == "lowercase":
+            return data.lower()
+        else:
+            raise ValueError(f"Unsupported format_type: {format_type}")
+
+    formatted_response = format_data_for_display(llm_response_text)
+    print(f"Formatted data: {formatted_response}")
+    # TOOL_CALL and TOOL_RESPONSE events are automatically logged.
+
+    try:
+        format_data_for_display("This will fail", format_type="invalid")
+    except ValueError as e:
+        print(f"Caught expected error from format_data_for_display: {e}")
+        # The @track_tool_use decorator logs a TOOL_RESPONSE with success:false.
+
+    # 6. Log a custom ERROR event manually
+    error_event = Event.create_error(
+        run_id=run_id,
+        user_id=client.get_current_user_id(),
+        error_type="ExampleError",
+        error_message="This is a simulated error event for demonstration.",
+        context={"module": "example_script", "severity": "info"},
+        # If this error was related to a previous event, set parent_event_id:
+        # parent_event_id=formatted_response_event_id # (need to capture event_id from decorator or tool)
+    )
+    client.log_event(error_event)
+    print(f"Logged custom Error event: {error_event.event_id}")
+
+    # 7. End the Run
+    client.end_run()
+    print(f"Run ended: {run_id}")
+
+    # 8. Flush and Shutdown
+    # In a real application, shutdown might be in a global cleanup hook.
+    print("Flushing remaining events and shutting down SDK...")
+    client.flush(timeout=5.0) # Wait up to 5s for flush
+    client.shutdown(timeout=5.0) # Wait up to 5s for shutdown tasks
+    print("SDK Example Finished.")
+
+if __name__ == "__main__":
+    # Note: For this example to send data, you'd need an InsideLLM collector
+    # running and accessible at the configured base_url, and a valid API key.
+    # For documentation purposes, it runs and prints to console.
+    run_sdk_example()
+```
+
+This example covers:
+*   Initializing the SDK.
+*   Starting and ending a run.
+*   Logging a `USER_INPUT` event manually.
+*   Using `@track_llm_call` to automatically log LLM interactions.
+*   Using `@track_tool_use` to automatically log tool usage, including error handling within the tool.
+*   Logging a custom `ERROR` event manually.
+*   Flushing events and shutting down the SDK.
+
+To run this example:
+1.  Save it as a Python file (e.g., `sdk_demo.py`).
+2.  Ensure the `insidellm` SDK is installed (`pip install insidellm`).
+3.  Set the `INSIDELLM_API_KEY` environment variable (or modify the script).
+4.  Run the script: `python sdk_demo.py`.
+
+You would then observe the logged events in your InsideLLM platform, associated with the `run_id` printed by the script.
+
+## Error Handling and Best Practices
+
+Here are some guidelines for handling errors and best practices when using the InsideLLM SDK.
+
+### Error Handling
+
+*   **SDK Initialization Errors:**
+    *   Ensure the API key is correctly provided (either directly, via `INSIDELLM_API_KEY` env var). Lack of an API key will raise a `ConfigurationError`.
+    *   Invalid `InsideLLMConfig` parameters (e.g., `batch_size <= 0`) will raise `ValueError` during config validation.
+*   **Event Logging Errors:**
+    *   **Strict Validation (`strict_validation=True`):** If an `Event` object fails Pydantic validation (e.g., missing required payload fields, incorrect data types), a `ValueError` will be raised when `client.log_event()` is called or when decorators attempt to log invalid events. This is the default and helps catch issues early.
+    *   **Permissive Validation (`strict_validation=False`):** If set to `False` in `InsideLLMConfig`, validation errors are logged by the SDK's internal logger, and the invalid event is dropped.
+*   **Network and API Errors:**
+    *   **Default Behavior (`raise_on_error=False`):** By default, if the SDK encounters network issues when trying to send events to the InsideLLM API (e.g., connection errors, server errors), it will log these errors internally and retry according to the `max_retries` and `backoff_factor` settings in `InsideLLMConfig`. If all retries fail, the batch of events may be dropped. Your application will not see these exceptions directly.
+    *   **Raising Exceptions (`raise_on_error=True`):** If you set `raise_on_error=True` in `InsideLLMConfig`, network or API errors (like `NetworkError` or errors from HTTP status codes 4xx/5xx) encountered during event sending will be raised as exceptions in the SDK's background worker thread. *Handling these requires careful consideration as they occur in a separate thread and might not be directly catchable in your main application flow unless the SDK is designed to propagate them, which might depend on the specific SDK version's advanced error handling capabilities.* For most use cases, relying on the default retry and logging mechanism (`raise_on_error=False`) is simpler.
+*   **Queue Full:** If the internal event queue (`max_queue_size`) is full, subsequent calls to `log_event()` may result in events being dropped. The SDK typically logs a warning in such cases. Monitor queue size via `client.get_queue_size()` or `client.queue_manager.get_statistics()` if you suspect this.
+*   **Decorator Errors:** Decorators generally catch exceptions from the decorated functions and log appropriate `ERROR` events or set `success:false` in `TOOL_RESPONSE` events. If the decorator itself has an issue (e.g., misconfiguration), it might log an error or behave unexpectedly.
+
+### Health Checks
+
+You can proactively check if the client can communicate with the InsideLLM API:
+
+```python
+client = insidellm.get_client()
+if client.is_healthy():
+    print("InsideLLM client can connect to the API.")
+else:
+    print("Warning: InsideLLM client might have issues connecting to the API.")
+```
+This performs a quick check against the API's health endpoint.
+
+### Best Practices
+
+1.  **Initialization:**
+    *   Initialize the SDK early in your application's lifecycle.
+    *   Use environment variables for API keys and sensitive configuration in production.
+2.  **Run Management:**
+    *   Use clear and consistent `user_id` values to enable effective user-centric analytics.
+    *   Generate unique and meaningful `run_id`s. If you have a natural session or request ID in your system, consider using that as the `run_id`.
+    *   Ensure `start_run()` and `end_run()` are called appropriately to delineate logical sessions. Unbounded runs can make data analysis harder.
+3.  **Event Logging:**
+    *   Log events at meaningful points in your application flow.
+    *   Utilize `parent_event_id` to link related events (e.g., a user request, the LLM calls it triggers, and the final agent response). Decorators handle this automatically for synchronous flows. For complex asynchronous or distributed systems, you may need to propagate and set `parent_event_id` manually.
+    *   Use the `metadata` field to add rich contextual information to your events. This can include application versions, environment details, A/B testing flags, feature flags, etc.
+    *   Choose the most specific `EventType` that matches the interaction you are logging.
+    *   For `payload` fields, adhere to the expected data types and structures. Refer to the Pydantic models in `insidellm.models` or the "Supported Event Types and Payloads" section.
+4.  **Asynchronous Nature & Shutdown:**
+    *   Remember that events are queued and sent asynchronously.
+    *   Always call `client.shutdown()` (or `insidellm.shutdown()`) during your application's graceful shutdown process. This ensures that any pending events in the queue are flushed to the API. Failure to do so can result in data loss.
+    *   Using the `InsideLLMClient` as a context manager (`with InsideLLMClient(...) as client:`) can also help ensure shutdown is called.
+5.  **Performance:**
+    *   While the SDK is designed to be lightweight, avoid logging excessively verbose data in tight loops without considering the potential performance impact of event creation and queueing.
+    *   Monitor the event queue size if you are logging a very high volume of events. Adjust `batch_size` and `auto_flush_interval` if needed.
+6.  **Security and Privacy:**
+    *   Be mindful of sensitive data. Do not log Personally Identifiable Information (PII) or other confidential data in event payloads or metadata unless it's explicitly required, anonymized, and compliant with your privacy policies and relevant regulations.
+    *   The SDK itself does not perform any PII redaction. This responsibility lies with your application.
+7.  **Testing:**
+    *   When testing your application, you might want to use a separate API key for a development/staging InsideLLM project or mock the SDK's API interactions.
+    *   The `base_url` configuration can be pointed to a mock server for local testing without sending data to the actual InsideLLM platform.
+8.  **Stay Updated:**
+    *   Keep your SDK version up-to-date to benefit from the latest features, bug fixes, and performance improvements. Check the SDK's changelog or release notes.
+
+By following these guidelines, you can ensure robust and effective integration with the InsideLLM platform.
