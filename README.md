@@ -90,6 +90,125 @@ agent = initialize_agent(tools, llm, callbacks=[callback])
 response = agent.run("What's the weather like today?")
 ```
 
+## Supported Frameworks / Integrations
+
+Beyond LangChain, the InsideLLM SDK provides or is developing integrations for other popular agent and LLM frameworks.
+
+### CrewAI Integration
+
+The `CrewAIInsideLLMCallbackHandler` allows you to capture LLM events from your CrewAI agent executions. Since CrewAI uses LiteLLM for its LLM interactions, this handler is based on LiteLLM's `CustomLogger` interface.
+
+**Usage:**
+
+1.  **Initialize `InsideLLMClient`** as shown in the basic usage.
+2.  **Create `CrewAIInsideLLMCallbackHandler`**: Pass your `InsideLLMClient` instance to it.
+3.  **Register with LiteLLM**: Append the handler to `litellm.callbacks` list *before* your CrewAI crew starts making LLM calls.
+
+```python
+from insidellm import InsideLLMClient, CrewAIInsideLLMCallbackHandler
+import litellm # CrewAI uses LiteLLM for its LLM interactions
+# from crewai import Agent, Task, Crew # Your CrewAI imports
+
+# 1. Initialize InsideLLMClient
+# insidellm.initialize(api_key="YOUR_INSIDELLM_API_KEY") # If using global client
+# client = insidellm.get_client()
+# For direct client instantiation:
+client = InsideLLMClient(api_key="YOUR_INSIDELLM_API_KEY")
+
+# 2. Create the callback handler
+# The handler manages its own run_id and user_id if not provided by a broader context.
+# You can pass specific run_id and user_id if your application manages them.
+crewai_callback_handler = CrewAIInsideLLMCallbackHandler(
+    client=client,
+    # run_id="your_specific_run_id", # Optional: if you want to tie to an existing run
+    # user_id="your_specific_user_id", # Optional
+    debug=True
+)
+
+# 3. Register with LiteLLM's global callback list
+if not hasattr(litellm, 'callbacks') or not litellm.callbacks:
+    litellm.callbacks = []
+if not any(isinstance(cb, CrewAIInsideLLMCallbackHandler) for cb in litellm.callbacks):
+    litellm.callbacks.append(crewai_callback_handler)
+    print("CrewAIInsideLLMCallbackHandler registered with LiteLLM.")
+
+# 4. Set up and run your CrewAI agents and crew as usual
+# Example:
+# research_agent = Agent(role='Researcher', goal='...', llm=...)
+# research_task = Task(description='...', agent=research_agent)
+# my_crew = Crew(agents=[research_agent], tasks=[research_task])
+# result = my_crew.kickoff()
+# Events related to LLM calls made by CrewAI agents will be captured.
+```
+
+*Note: Effective capturing of events depends on CrewAI's internal usage of LiteLLM and the timing of callback registration. Ensure registration happens before LLM calls are made by agents.*
+
+### Google Vertex AI Agent Builder Integration
+
+The `InsideLLMVertexAgentBuilderConversationalSearchClient` acts as a wrapper around the official `google.cloud.discoveryengine_v1.ConversationalSearchServiceAsyncClient`. It intercepts calls to methods like `converse_conversation` to log events.
+
+**Captured Events:**
+- User input (`user.input`)
+- Agent's final response (`agent.response`)
+- Tool calls and responses (`tool.call`, `tool.response`) parsed from the conversation flow, particularly from `Answer.Step` structures (e.g., `SearchAction` and observations).
+
+**Usage:**
+
+1.  **Initialize `InsideLLMClient`**.
+2.  **Initialize the Google SDK's `ConversationalSearchServiceAsyncClient`**.
+3.  **Wrap the SDK client**: Pass the SDK client, your `InsideLLMClient` instance, a `user_id`, and a `run_id` to the `InsideLLMVertexAgentBuilderConversationalSearchClient` constructor.
+4.  Use the wrapped client in place of the original SDK client.
+
+```python
+from google.cloud.discoveryengine_v1 import ConversationalSearchServiceAsyncClient
+from insidellm import InsideLLMClient, InsideLLMVertexAgentBuilderConversationalSearchClient
+# from insidellm import initialize # If using global client
+# from google.cloud.discoveryengine_v1.types import ConverseConversationRequest, Query # For making requests
+# import asyncio
+
+# async def run_vertex_example():
+#     # 1. Initialize InsideLLMClient
+#     # initialize(api_key="YOUR_INSIDELLM_API_KEY")
+#     # inside_llm_client = get_client()
+#     inside_llm_client = InsideLLMClient(api_key="YOUR_INSIDELLM_API_KEY")
+
+#     # 2. Initialize the original Google SDK client (ensure GOOGLE_APPLICATION_CREDENTIALS is set)
+#     google_sdk_client = ConversationalSearchServiceAsyncClient() # Add your client config if needed
+
+#     # 3. Define user_id and run_id for the session/interaction
+#     user_id = "example_vertex_user_456"
+#     run_id = "vertex_interaction_run_001" # Manage this ID for your application's session
+
+#     # 4. Wrap the Google SDK client
+#     wrapped_client = InsideLLMVertexAgentBuilderConversationalSearchClient(
+#         client=google_sdk_client,
+#         insidellm_client=inside_llm_client,
+#         user_id=user_id,
+#         run_id=run_id,
+#         debug=True
+#     )
+
+#     # 5. Use the wrapped client as you would the original SDK client
+#     # request = ConverseConversationRequest(
+#     #     name="projects/YOUR_PROJECT/locations/global/dataStores/YOUR_DATASTORE/conversations/-",
+#     #     query=Query(text="Hello Vertex AI Agent!")
+#     # )
+#     # try:
+#     #     response = await wrapped_client.converse_conversation(request=request)
+#     #     if response.reply and response.reply.summary:
+#     #         print(f"Agent response: {response.reply.summary.summary_text}")
+#     # except Exception as e:
+#     #     print(f"An error occurred: {e}")
+#     # finally:
+#     #     await google_sdk_client.close() # Close the original client when done
+#     #     # Consider if wrapper needs a close method or if original client closure is sufficient
+
+# # if __name__ == "__main__":
+# # asyncio.run(run_vertex_example())
+```
+
+*Note: The wrapper intercepts specific methods like `converse_conversation`. Other methods of the SDK client are forwarded dynamically but won't have specific event logging unless added to the wrapper.*
+
 ### Custom Agent Integration
 
 #### Using Decorators
@@ -277,7 +396,9 @@ The repository includes comprehensive examples:
 - `InsideLLMClient` - Main client for event logging
 - `Event` - Event data model
 - `InsideLLMTracker` - Context manager for workflow tracking
-- `InsideLLMCallback` - LangChain callback handler
+- `InsideLLMCallback` - LangChain callback handler (from `.langchain_integration`)
+- `CrewAIInsideLLMCallbackHandler` - Callback handler for CrewAI (via LiteLLM)
+- `InsideLLMVertexAgentBuilderConversationalSearchClient` - Wrapper for Vertex AI Agent Builder SDK client
 
 ### Decorators
 

@@ -30,6 +30,10 @@ from .models import (
     PerformanceMetricPayload
 )
 #from .langchain_integration import InsideLLMCallback
+from .crewai_integration import CrewAIInsideLLMCallbackHandler
+from .vertex_ai_agent_builder_integration import InsideLLMVertexAgentBuilderConversationalSearchClient
+from .langchain_integration import InsideLLMCallback
+from .mistral_integration import MistralAIWrapper
 from .decorators import track_llm_call, track_tool_use, track_agent_step
 from .context_manager import InsideLLMTracker
 from .config import InsideLLMConfig
@@ -92,7 +96,10 @@ __all__ = [
     'InsideLLMClient',
     'Event',
     'EventType',
-    'InsideLLMCallback',
+    'InsideLLMCallback', # This was for Langchain, commented out above but kept in __all__
+    'CrewAIInsideLLMCallbackHandler',
+    'InsideLLMVertexAgentBuilderConversationalSearchClient',
+    'MistralAIWrapper',
     'InsideLLMTracker',
     'InsideLLMConfig',
     'track_llm_call',

@@ -23,6 +23,10 @@ class EventType(str, Enum):
     AGENT_PLANNING = "agent.planning"
     AGENT_RESPONSE = "agent.response"
     
+    # Chain Operations
+    CHAIN_START = "chain.start"
+    CHAIN_END = "chain.end"
+    
     # LLM Operations
     LLM_REQUEST = "llm.request"
     LLM_RESPONSE = "llm.response"
@@ -46,6 +50,9 @@ class EventType(str, Enum):
     SESSION_START = "run.start"
     SESSION_END = "run.end"
     PERFORMANCE_METRIC = "performance_metric"
+    
+    # Custom Events
+    CUSTOM_EVENT = "custom.event" 
 
 
 # Payload Models for each event type
@@ -225,6 +232,26 @@ class PerformanceMetricPayload(BasePayload):
     additional_metrics: Optional[Dict[str, Union[int, float]]] = None
 
 
+class ChainStartPayload(BasePayload):
+    """Payload for chain start events."""
+    chain_name: str
+    inputs: Dict[str, Any]
+    parameters: Optional[Dict[str, Any]] = None
+    chain_type: Optional[str] = None  # sequential, parallel, etc.
+    chain_metadata: Optional[Dict[str, Any]] = None
+
+
+class ChainEndPayload(BasePayload):
+    """Payload for chain end events."""
+    chain_name: str
+    outputs: Dict[str, Any]
+    execution_time_ms: Optional[int] = None
+    chain_type: Optional[str] = None
+    chain_metadata: Optional[Dict[str, Any]] = None
+    success: bool = True
+    error_message: Optional[str] = None
+
+
 # Main Event Model
 
 class Event(BaseModel):
@@ -287,6 +314,8 @@ class Event(BaseModel):
             EventType.AGENT_REASONING: AgentReasoningPayload,
             EventType.AGENT_PLANNING: AgentPlanningPayload,
             EventType.AGENT_RESPONSE: AgentResponsePayload,
+            EventType.CHAIN_START: ChainStartPayload,
+            EventType.CHAIN_END: ChainEndPayload,
             EventType.LLM_REQUEST: LLMRequestPayload,
             EventType.LLM_RESPONSE: LLMResponsePayload,
             EventType.LLM_STREAMING_CHUNK: LLMStreamingChunkPayload,
@@ -407,6 +436,56 @@ class Event(BaseModel):
             run_id=run_id,
             user_id=user_id,
             event_type=EventType.ERROR,
+            payload=payload,
+            parent_event_id=parent_event_id,
+            **{k: v for k, v in kwargs.items() if k in cls.__fields__}
+        )
+    
+    @classmethod
+    def create_chain_start(
+        cls,
+        run_id: str,
+        user_id: str,
+        chain_name: str,
+        inputs: Dict[str, Any],
+        **kwargs
+    ) -> 'Event':
+        """Create a chain start event."""
+        payload = ChainStartPayload(
+            chain_name=chain_name,
+            inputs=inputs,
+            **{k: v for k, v in kwargs.items() if k in ChainStartPayload.__fields__}
+        ).dict()
+        
+        return cls(
+            run_id=run_id,
+            user_id=user_id,
+            event_type=EventType.CHAIN_START,
+            payload=payload,
+            **{k: v for k, v in kwargs.items() if k in cls.__fields__}
+        )
+    
+    @classmethod
+    def create_chain_end(
+        cls,
+        run_id: str,
+        user_id: str,
+        chain_name: str,
+        outputs: Dict[str, Any],
+        parent_event_id: Optional[str] = None,
+        **kwargs
+    ) -> 'Event':
+        """Create a chain end event."""
+        payload = ChainEndPayload(
+            chain_name=chain_name,
+            outputs=outputs,
+            **{k: v for k, v in kwargs.items() if k in ChainEndPayload.__fields__}
+        ).dict()
+        
+        return cls(
+            run_id=run_id,
+            user_id=user_id,
+            event_type=EventType.CHAIN_END,
             payload=payload,
             parent_event_id=parent_event_id,
             **{k: v for k, v in kwargs.items() if k in cls.__fields__}
